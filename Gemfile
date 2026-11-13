@@ -41,3 +41,7 @@ end
 
 gem "dotenv", "= 3.2.0", require: "dotenv/parser"
 gem "aws-sdk-s3", "~> 1.237"
+
+gem "importmap-rails", "= 2.2.3"
+
+gem "stimulus-rails", "= 1.3.4"

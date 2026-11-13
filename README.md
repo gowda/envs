@@ -1,15 +1,20 @@
-# Envs
+# envs
 
-Envs displays variables from S3 dotenv files and uploaded dotenv files. It uses Rails 8.1 and Ruby 3.4.12.
+envs displays variables from S3 dotenv files and uploaded dotenv files. It uses Rails 8.1 and Ruby 3.4.12.
 
 - Run `bin/setup` to install dependencies and prepare SQLite.
 - Run `bin/rails server` to start the app.
-- Open the root page to view local snapshots of S3 files.
+- The root page redirects to `/files`.
+- Open `/s3` to view local snapshots of S3 files.
 - Select **Refresh from S3** to fetch the current files and remove snapshots of deleted files.
 - Select a file card to view its variables.
-- Open `/upload` to upload a UTF-8 dotenv file of 1 MB or less.
+- Open `/files` to select or drop a UTF-8 dotenv file of 1 MB or less.
 - The app displays variables in file order and preserves literal commands and references.
-- The app does not save uploads or load dotenv files into its environment.
+- Valid uploads are stored on local disk and redirect to `/files/<public ID>`.
+- The disk service stores uploads under `storage/` and test uploads under `tmp/storage/`.
+- Uploaded bytes are unencrypted. Encryption and deletion are deferred.
+- The app does not list stored uploads or load their variables into its environment.
+- The app uses Stimulus through importmap for file selection and drop uploads.
 - Use invented values in examples and test files. Do not commit secrets.
 - Run `bundle exec rspec` to run the specs.
 - Run `bin/ci` to run the local checks and specs.

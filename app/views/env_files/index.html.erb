@@ -1,8 +1,8 @@
-<% content_for :title, "S3 dotenv files · Envs" %>
+<% content_for :title, "S3 dotenv files · envs" %>
 <div class="Subhead flex-items-center">
   <h1 class="Subhead-heading">S3 dotenv files</h1>
   <div class="Subhead-actions">
-    <%= button_to "Refresh from S3", refresh_env_files_path, class: "btn btn-primary" %>
+    <%= button_to "Refresh from S3", refresh_s3_path, class: "btn btn-primary" %>
   </div>
 </div>
 <% if @bucket.nil? %>
@@ -26,7 +26,7 @@
     <% @env_files.each do |file| %>
       <% result = file.parsed_contents %>
       <div class="col-12 col-md-6 p-2">
-        <%= link_to env_file_path(file), class: "Box d-block p-3 height-full Link--primary" do %>
+        <%= link_to s3_file_path(file), class: "Box d-block p-3 height-full Link--primary" do %>
           <h2 class="f4 mb-2 variable-text"><%= file.file_name %></h2>
           <p class="text-mono color-fg-muted variable-text"><%= file.key %></p>
           <% if result.error %>
@@ -34,7 +34,13 @@
           <% else %>
             <p><%= pluralize(result.variables.size, "variable") %></p>
           <% end %>
-          <p class="color-fg-muted mt-2 mb-0">Last modified: <%= file.last_modified&.utc&.iso8601 || "Unknown" %></p>
+          <p class="color-fg-muted mt-2 mb-0">
+            <% if file.last_modified %>
+              <time datetime="<%= file.last_modified.utc.iso8601 %>" title="<%= file.last_modified.utc.iso8601 %>">Updated <%= time_ago_in_words(file.last_modified) %> ago</time>
+            <% else %>
+              Updated time unknown
+            <% end %>
+          </p>
         <% end %>
       </div>
     <% end %>

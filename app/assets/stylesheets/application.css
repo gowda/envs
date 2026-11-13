@@ -1,4 +1,28 @@
+body {
+  min-height: 100vh;
+}
+
 .variable-text {
   white-space: pre-wrap;
   overflow-wrap: anywhere;
+}
+
+.Header-link[aria-current="page"] {
+  text-decoration: underline;
+  text-underline-offset: 6px;
+  font-weight: bold;
+}
+
+.upload-form {
+  min-height: 65vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+
+body.upload-dragging {
+  background-color: var(--bgColor-accent-muted, #ddf4ff);
+  outline: 4px solid var(--borderColor-accent-emphasis, #0969da);
+  outline-offset: -4px;
 }
