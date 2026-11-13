@@ -1,0 +1,10 @@
+<% content_for :title, "#{@env_file.file_name} · Envs" %>
+<div class="Subhead">
+  <h1 class="Subhead-heading variable-text"><%= @env_file.file_name %></h1>
+</div>
+<p class="text-mono color-fg-muted variable-text"><%= @env_file.key %></p>
+<% if @result.error %>
+  <div class="flash flash-error" role="alert"><%= @result.error %></div>
+<% else %>
+  <%= render "variables/list", variables: @result.variables %>
+<% end %>

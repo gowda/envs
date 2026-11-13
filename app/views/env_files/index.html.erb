@@ -1,0 +1,42 @@
+<% content_for :title, "S3 dotenv files · Envs" %>
+<div class="Subhead flex-items-center">
+  <h1 class="Subhead-heading">S3 dotenv files</h1>
+  <div class="Subhead-actions">
+    <%= button_to "Refresh from S3", refresh_env_files_path, class: "btn btn-primary" %>
+  </div>
+</div>
+<% if @bucket.nil? %>
+  <div class="blankslate Box">
+    <h2 class="blankslate-heading">Configure an S3 bucket</h2>
+    <p>Set ENVS_S3_BUCKET, AWS_REGION and ENVS_ENCRYPTION_KEY to read dotenv files. Set ENVS_S3_PREFIX to limit the listing to a prefix.</p>
+    <p>AWS credentials use the standard AWS credential chain.</p>
+  </div>
+<% elsif @encryption_missing %>
+  <div class="blankslate Box">
+    <h2 class="blankslate-heading">Snapshots unavailable</h2>
+    <p>Configure the encryption key to read existing snapshots.</p>
+  </div>
+<% elsif @env_files.empty? %>
+  <div class="blankslate Box">
+    <h2 class="blankslate-heading">No snapshots yet</h2>
+    <p>Use Refresh from S3 to fetch dotenv files from the bucket.</p>
+  </div>
+<% else %>
+  <div class="d-flex flex-wrap mx-n2" aria-label="Dotenv files">
+    <% @env_files.each do |file| %>
+      <% result = file.parsed_contents %>
+      <div class="col-12 col-md-6 p-2">
+        <%= link_to env_file_path(file), class: "Box d-block p-3 height-full Link--primary" do %>
+          <h2 class="f4 mb-2 variable-text"><%= file.file_name %></h2>
+          <p class="text-mono color-fg-muted variable-text"><%= file.key %></p>
+          <% if result.error %>
+            <span class="Label Label--danger"><%= file.too_large? ? "Too large" : "Invalid dotenv file" %></span>
+          <% else %>
+            <p><%= pluralize(result.variables.size, "variable") %></p>
+          <% end %>
+          <p class="color-fg-muted mt-2 mb-0">Last modified: <%= file.last_modified&.utc&.iso8601 || "Unknown" %></p>
+        <% end %>
+      </div>
+    <% end %>
+  </div>
+<% end %>

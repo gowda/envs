@@ -1,5 +1,6 @@
-class DotenvUpload
+class DotenvContents
   MAX_BYTES = 1.megabyte
+  TOO_LARGE_MESSAGE = "The file must be 1 MB or smaller."
   INVALID_MESSAGE = "Upload a valid dotenv file with at least one variable."
   Result = Data.define(:variables, :error)
 
@@ -9,7 +10,7 @@ class DotenvUpload
   private_constant :LiteralParser
 
   def self.call(text)
-    return Result.new(nil, "The file must be 1 MB or smaller.") if text.bytesize > MAX_BYTES
+    return Result.new(nil, TOO_LARGE_MESSAGE) if text.bytesize > MAX_BYTES
 
     text = text.dup.force_encoding(Encoding::UTF_8)
     return Result.new(nil, "The file must use valid UTF-8 encoding.") unless text.valid_encoding?

@@ -40,3 +40,4 @@ group :development do
 end
 
 gem "dotenv", "= 3.2.0", require: "dotenv/parser"
+gem "aws-sdk-s3", "~> 1.237"

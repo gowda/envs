@@ -3,7 +3,7 @@ require "rails_helper"
 RSpec.describe "Dotenv uploads", type: :request do
   def upload(text)
     file = Rack::Test::UploadedFile.new(StringIO.new(text), "text/plain", true, original_filename: "invented.env")
-    post root_path, params: { file: file }
+    post upload_path, params: { file: file }
   end
 
   def document
@@ -11,7 +11,7 @@ RSpec.describe "Dotenv uploads", type: :request do
   end
 
   it "shows one file field, one submit button, Primer and no script" do
-    get root_path
+    get upload_path
 
     expect(response).to have_http_status(:ok)
     expect(document.css('input[type="file"]').size).to eq(1)
@@ -64,7 +64,7 @@ RSpec.describe "Dotenv uploads", type: :request do
       upload(text)
 
       expect(response).to have_http_status(:unprocessable_content)
-      expect(document.at_css(".flash-error").text).to eq(DotenvUpload::INVALID_MESSAGE)
+      expect(document.at_css(".flash-error").text).to eq(DotenvContents::INVALID_MESSAGE)
       expect(document.css('input[type="file"]').size).to eq(1)
       expect(document.css("section .Box-row")).to be_empty
     end
@@ -75,7 +75,7 @@ RSpec.describe "Dotenv uploads", type: :request do
       upload(text)
 
       expect(response).to have_http_status(:unprocessable_content)
-      expect(document.at_css(".flash-error").text).to eq(DotenvUpload::INVALID_MESSAGE)
+      expect(document.at_css(".flash-error").text).to eq(DotenvContents::INVALID_MESSAGE)
     end
   end
 
@@ -87,14 +87,14 @@ RSpec.describe "Dotenv uploads", type: :request do
   end
 
   it "rejects a file over 1 MB" do
-    upload("KEY=" + "a" * DotenvUpload::MAX_BYTES)
+    upload("KEY=" + "a" * DotenvContents::MAX_BYTES)
 
     expect(response).to have_http_status(:unprocessable_content)
     expect(document.at_css(".flash-error").text).to include("1 MB or smaller")
   end
 
   it "accepts a file exactly 1 MB" do
-    upload("KEY=" + "a" * (DotenvUpload::MAX_BYTES - 4))
+    upload("KEY=" + "a" * (DotenvContents::MAX_BYTES - 4))
 
     expect(response).to have_http_status(:ok)
   end
@@ -130,7 +130,7 @@ RSpec.describe "Dotenv uploads", type: :request do
       upload(text)
 
       expect(response).to have_http_status(:unprocessable_content)
-      expect(document.at_css(".flash-error").text).to eq(DotenvUpload::INVALID_MESSAGE)
+      expect(document.at_css(".flash-error").text).to eq(DotenvContents::INVALID_MESSAGE)
       expect(document.css("section .Box-row")).to be_empty
     end
   end
@@ -143,7 +143,7 @@ RSpec.describe "Dotenv uploads", type: :request do
   end
 
   it "asks for a file when no file is uploaded" do
-    post root_path
+    post upload_path
 
     expect(response).to have_http_status(:unprocessable_content)
     expect(document.at_css(".flash-error").text).to eq("Choose a dotenv file to upload.")
