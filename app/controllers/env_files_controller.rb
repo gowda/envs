@@ -3,6 +3,9 @@ class EnvFilesController < ApplicationController
   rescue_from Aws::Errors::ServiceError, with: :aws_error
   rescue_from Aws::Errors::MissingRegionError, with: :missing_region
   rescue_from Aws::Errors::MissingCredentialsError, with: :missing_credentials
+  rescue_from Seahorse::Client::NetworkingError, with: :networking_error
+  rescue_from Aws::Errors::InvalidSSOToken, with: :expired_login
+  rescue_from Aws::Errors::NoSuchProfileError, with: :missing_profile
   rescue_from ActiveRecord::Encryption::Errors::Configuration, with: :missing_encryption_key
 
   def index
@@ -33,8 +36,20 @@ class EnvFilesController < ApplicationController
     response.headers["Cache-Control"] = "no-store"
   end
 
-  def aws_error
-    redirect_to root_path, alert: "S3 refresh failed. Check bucket access and try again."
+  def aws_error(error)
+    redirect_to root_path, alert: "S3 refresh failed (#{error.code})."
+  end
+
+  def networking_error
+    redirect_to root_path, alert: "S3 cannot be reached."
+  end
+
+  def expired_login
+    redirect_to root_path, alert: "The AWS login has expired. Sign in again."
+  end
+
+  def missing_profile
+    redirect_to root_path, alert: "The AWS profile does not exist."
   end
 
   def missing_region

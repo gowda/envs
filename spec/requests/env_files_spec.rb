@@ -186,15 +186,36 @@ RSpec.describe "S3 dotenv files", type: :request do
     expect(client.api_requests).to be_empty
   end
 
-  it "shows a safe AWS error without altering snapshots or exposing the exception" do
-    refresh
-    file = EnvFile.first!
-    client.stub_responses(:list_objects_v2, "AccessDenied")
+  %w[AccessDenied NoSuchBucket ExpiredToken].each do |code|
+    it "shows only the AWS error code for #{code} without altering snapshots" do
+      refresh
+      snapshots = EnvFile.order(:id).map(&:attributes)
+      client.stub_responses(:list_objects_v2,
+        status_code: code == "NoSuchBucket" ? 404 : 403, headers: {},
+        body: "<Error><Code>#{code}</Code><Message>#{bucket} invented-credential</Message></Error>")
 
-    refresh
+      refresh
 
-    expect(document.at_css(".flash-error").text).to eq("S3 refresh failed. Check bucket access and try again.")
-    expect(EnvFile.first!.attributes).to eq(file.attributes)
+      expect(document.at_css(".flash-error").text).to eq("S3 refresh failed (#{code}).")
+      expect(EnvFile.order(:id).map(&:attributes)).to eq(snapshots)
+    end
+  end
+
+  [
+    [ Seahorse::Client::NetworkingError.new(SocketError.new("invented-endpoint")), "S3 cannot be reached." ],
+    [ Aws::Errors::InvalidSSOToken.new("invented-credential"), "The AWS login has expired. Sign in again." ],
+    [ Aws::Errors::NoSuchProfileError.new("invented-profile"), "The AWS profile does not exist." ]
+  ].each do |error, message|
+    it "shows a safe flash for #{error.class} without altering snapshots" do
+      refresh
+      snapshots = EnvFile.order(:id).map(&:attributes)
+      client.stub_responses(:list_objects_v2, error)
+
+      refresh
+
+      expect(document.at_css(".flash-error").text).to eq(message)
+      expect(EnvFile.order(:id).map(&:attributes)).to eq(snapshots)
+    end
   end
 
   it "rolls back updates and deletions when a download fails" do
