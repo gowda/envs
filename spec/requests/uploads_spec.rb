@@ -7,7 +7,7 @@ RSpec.describe "Dotenv uploads", type: :request do
   end
 
   def document
-    Nokogiri::HTML(response.body)
+    Nokogiri::HTML5(response.body)
   end
 
   it "shows one file field, one submit button, Primer and no script" do
@@ -105,6 +105,41 @@ RSpec.describe "Dotenv uploads", type: :request do
     expect(response).to have_http_status(:ok)
     expect(document.at_css("pre").text).to eq("first\nhello world\n# still a value")
     expect(document.css("section .Box-row").first.css("div").map(&:text)).to eq([ "BARE", "" ])
+  end
+
+  [
+    [ 'A="closed"', "closed" ],
+    [ "A='closed'", "closed" ],
+    [ "A=\"first\nsecond\"", "first\nsecond" ],
+    [ 'A="with \" escaped"', 'with " escaped' ],
+    [ 'A="closed" # comment', "closed" ],
+    [ 'A=plain "inner" text', 'plain "inner" text' ],
+    [ 'A=""', "" ],
+    [ "A=", "" ]
+  ].each do |text, value|
+    it "accepts the valid value in #{text.inspect}" do
+      upload(text)
+
+      expect(response).to have_http_status(:ok)
+      expect(document.at_css("section .Box-row .col-8, section .Box-row pre").text).to eq(value)
+    end
+  end
+
+  [ 'A="unterminated', "A='unterminated", 'A="x" garbage', 'A="one" "two"', "A=\"unterminated\nOTHER=value\n" ].each do |text|
+    it "rejects the malformed quoted value in #{text.inspect}" do
+      upload(text)
+
+      expect(response).to have_http_status(:unprocessable_content)
+      expect(document.at_css(".flash-error").text).to eq(DotenvUpload::INVALID_MESSAGE)
+      expect(document.css("section .Box-row")).to be_empty
+    end
+  end
+
+  it "preserves the leading newline of a multiline value" do
+    upload("A=\"\nfirst\nsecond\"\n")
+
+    expect(response).to have_http_status(:ok)
+    expect(response.body).to match(/<pre\b[^>]*>\n\nfirst\nsecond<\/pre>/)
   end
 
   it "asks for a file when no file is uploaded" do

@@ -4,7 +4,8 @@
     <% if value.include?("\n") %>
       <div class="Box-row">
         <div class="text-mono text-bold variable-text mb-2"><%= key %></div>
-        <pre class="text-mono variable-text mb-0"><%= value %></pre>
+        <pre class="text-mono variable-text mb-0">
+<%= value %></pre>
       </div>
     <% else %>
       <div class="Box-row d-flex">

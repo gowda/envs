@@ -15,7 +15,13 @@ class DotenvUpload
     return Result.new(nil, "The file must use valid UTF-8 encoding.") unless text.valid_encoding?
 
     text = text.gsub(/\r\n?/, "\n")
-    remainder = text.gsub(Dotenv::Parser::LINE, "")
+    remainder = text.gsub(Dotenv::Parser::LINE) do
+      value = Regexp.last_match[:value].to_s.strip
+      if value.start_with?("\"", "'") && !value.match?(/\A"(?:\\"|[^"])*"\z/) && !value.match?(/\A'(?:\\'|[^'])*'\z/)
+        return Result.new(nil, INVALID_MESSAGE)
+      end
+      ""
+    end
     return Result.new(nil, INVALID_MESSAGE) unless remainder.each_line.all? { |line| line.strip.empty? || line.lstrip.start_with?("#") }
 
     variables = LiteralParser.call(text, overwrite: true)
