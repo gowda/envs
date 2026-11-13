@@ -6,9 +6,9 @@ class UploadsController < ApplicationController
     response.headers["Cache-Control"] = "no-store"
     file = params.permit(:file)[:file]
     result = if file.is_a?(ActionDispatch::Http::UploadedFile)
-      DotenvUpload.call(file.read(DotenvUpload::MAX_BYTES + 1).to_s)
+      DotenvContents.call(file.read(DotenvContents::MAX_BYTES + 1).to_s)
     else
-      DotenvUpload::Result.new(nil, "Choose a dotenv file to upload.")
+      DotenvContents::Result.new(nil, "Choose a dotenv file to upload.")
     end
     @variables = result.variables
     @error = result.error
