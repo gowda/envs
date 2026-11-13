@@ -35,10 +35,32 @@ RSpec.describe "S3 dotenv files", type: :request do
   end
 
   def refresh
-    post refresh_env_files_path
-    expect(response).to redirect_to(root_path)
+    post refresh_s3_path
+    expect(response).to redirect_to(s3_path)
     follow_redirect!
     expect(response).to have_http_status(:ok)
+  end
+
+  it "uses the S3 paths, lowercase brand and current section" do
+    refresh
+    expect(document.at_css('header [aria-current="page"]').text).to eq("Amazon S3")
+    expect(document.at_css("header span").text).to eq("envs")
+    expect(document.at_css("title").text).to eq("S3 dotenv files · envs")
+    expect(document.at_css("time")["title"]).to eq(modified.iso8601)
+    expect(document.at_css("form")["action"]).to eq("/s3/refresh")
+    get s3_file_path(EnvFile.first!)
+    expect(response).to have_http_status(:ok)
+    expect(document.at_css('header [aria-current="page"]').text).to eq("Amazon S3")
+    expect(document.at_css("title").text).to eq(".env · envs")
+  end
+
+  it "uses singular and plural refresh messages" do
+    refresh
+    expect(document.at_css(".flash-success").text).to eq("Refreshed 1 dotenv file from S3.")
+    contents["invented/app.env"] = "APP=invented"
+    client.stub_responses(:list_objects_v2, contents: [ object("invented/.env"), object("invented/app.env") ])
+    refresh
+    expect(document.at_css(".flash-success").text).to eq("Refreshed 2 dotenv files from S3.")
   end
 
   it "refreshes every page, selects all three name patterns and displays cards and errors" do
@@ -66,21 +88,21 @@ RSpec.describe "S3 dotenv files", type: :request do
     cards = document.css('[aria-label="Dotenv files"] a.Box')
     expect(cards.size).to eq(5)
     expect(cards.map { |card| card.at_css("h2").text }).to include(".env", ".env.production", "app.env")
-    expect(cards.first.text).to include("invented/.env", "2 variables", modified.iso8601)
-    expect(cards.first["href"]).to eq(env_file_path(EnvFile.find_by!(key: "invented/.env")))
+    expect(cards.first.text).to include("invented/.env", "2 variables", "Updated 13 days ago")
+    expect(cards.first["href"]).to eq(s3_file_path(EnvFile.find_by!(key: "invented/.env")))
     expect(document.text).to include("Invalid dotenv file", "Too large")
     expect(document.text).not_to include("invented-value", "ignored.txt")
-    expect(document.css("script")).to be_empty
+    expect(document.css("script").map { |tag| tag["type"] }).to eq(%w[importmap module])
     expect(response.headers["Cache-Control"]).to eq("no-store")
     expect(EnvFile.find_by!(key: "invented/big.env").content).to be_nil
     expect(EnvFile.find_by!(key: "invented/.env").attributes.slice("etag", "last_modified", "fetched_at"))
       .to eq("etag" => '"invented-etag"', "last_modified" => modified, "fetched_at" => Time.current)
 
-    get env_file_path(EnvFile.find_by!(key: "invented/bad.env"))
+    get s3_file_path(EnvFile.find_by!(key: "invented/bad.env"))
     expect(document.at_css(".flash-error").text).to eq(DotenvContents::INVALID_MESSAGE)
     expect(document.css("section")).to be_empty
 
-    get env_file_path(EnvFile.find_by!(key: "invented/big.env"))
+    get s3_file_path(EnvFile.find_by!(key: "invented/big.env"))
     expect(document.at_css(".flash-error").text).to eq(DotenvContents::TOO_LARGE_MESSAGE)
   end
 
@@ -89,16 +111,16 @@ RSpec.describe "S3 dotenv files", type: :request do
     refresh
     file = EnvFile.find_by!(bucket: bucket, key: "invented/.env")
 
-    get env_file_path(file)
+    get s3_file_path(file)
 
     expect(response).to have_http_status(:ok)
     expect(document.at_css("h1").text).to eq(".env")
     expect(document.css("section .Box-row").size).to eq(4)
     expect(document.at_css("section pre").text).to eq("line one\n<script>invented</script>")
     expect(document.text).to include("invented-value", "$(echo invented)", "$PATH")
-    expect(document.css("script")).to be_empty
+    expect(document.css("script").map { |tag| tag["type"] }).to eq(%w[importmap module])
     expect(response.headers["Cache-Control"]).to eq("no-store")
-    expect(document.css("header a").map { |link| link["href"] }).to eq([ root_path, upload_path ])
+    expect(document.css("header a").map { |link| link["href"] }).to eq([ files_path, s3_path ])
     raw = EnvFile.connection.select_value("SELECT content FROM env_files WHERE id = #{file.id.to_i}")
     expect(raw).not_to include("invented-value", "FIRST", "MULTI")
     expect(JSON.parse(raw)).to have_key("p")
@@ -138,7 +160,7 @@ RSpec.describe "S3 dotenv files", type: :request do
     contents["invented/.env"] = "KEY=\xFF".b
     refresh
 
-    get env_file_path(EnvFile.first!)
+    get s3_file_path(EnvFile.first!)
 
     expect(document.at_css(".flash-error").text).to include("valid UTF-8")
   end
@@ -150,7 +172,7 @@ RSpec.describe "S3 dotenv files", type: :request do
     refresh
 
     expect(EnvFile.first!.content).to eq(contents["invented/.env"])
-    get env_file_path(EnvFile.first!)
+    get s3_file_path(EnvFile.first!)
     expect(document.at_css("section .col-8").text.bytesize).to eq(DotenvContents::MAX_BYTES - 4)
   end
 
@@ -167,22 +189,22 @@ RSpec.describe "S3 dotenv files", type: :request do
   it "shows the bucket configuration blankslate without making an AWS call" do
     ENV.delete("ENVS_S3_BUCKET")
 
-    get root_path
+    get s3_path
 
     expect(response).to have_http_status(:ok)
     expect(document.at_css(".blankslate").text).to include("ENVS_S3_BUCKET", "ENVS_S3_PREFIX", "AWS_REGION", "ENVS_ENCRYPTION_KEY")
-    expect(document.css("script")).to be_empty
+    expect(document.css("script").map { |tag| tag["type"] }).to eq(%w[importmap module])
     refresh
     expect(document.at_css(".flash-error").text).to include("ENVS_S3_BUCKET")
     expect(client.api_requests).to be_empty
   end
 
   it "shows the empty snapshot blankslate and refresh button" do
-    get root_path
+    get s3_path
 
     expect(response).to have_http_status(:ok)
     expect(document.at_css(".blankslate").text).to include("No snapshots yet", "Refresh from S3")
-    expect(document.at_css("form")["action"]).to eq(refresh_env_files_path)
+    expect(document.at_css("form")["action"]).to eq(refresh_s3_path)
     expect(client.api_requests).to be_empty
   end
 
@@ -257,8 +279,8 @@ RSpec.describe "S3 dotenv files", type: :request do
 
     expect(document.at_css(".flash-error").text).to include("ENVS_ENCRYPTION_KEY")
     expect(document.at_css(".blankslate").text).to include("Snapshots unavailable")
-    get env_file_path(EnvFile.first!)
-    expect(response).to redirect_to(root_path)
+    get s3_file_path(EnvFile.first!)
+    expect(response).to redirect_to(s3_path)
   ensure
     config.primary_key = original_key if config
   end
@@ -271,7 +293,7 @@ RSpec.describe "S3 dotenv files", type: :request do
     allow(Rails).to receive(:logger).and_return(logger)
 
     refresh
-    get env_file_path(EnvFile.first!)
+    get s3_file_path(EnvFile.first!)
 
     expect(output.string).not_to include("invented-value", "FIRST=invented")
   ensure

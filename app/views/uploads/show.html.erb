@@ -1,0 +1,5 @@
+<% content_for :title, "#{@upload.file.filename} · envs" %>
+<div class="Subhead">
+  <h1 class="Subhead-heading variable-text"><%= @upload.file.filename %></h1>
+</div>
+<%= render "variables/list", variables: @variables %>

@@ -4,6 +4,7 @@
 # and recreated between test runs. Don't rely on the data there!
 
 Rails.application.configure do
+  config.active_storage.service = :test
   config.active_record.encryption.primary_key = "invented-test-encryption-key-for-envs"
   # Settings specified here will take precedence over those in config/application.rb.
 

@@ -1,17 +1,27 @@
 class UploadsController < ApplicationController
+  before_action :prevent_caching
+
   def new
   end
 
   def create
-    response.headers["Cache-Control"] = "no-store"
-    file = params.permit(:file)[:file]
-    result = if file.is_a?(ActionDispatch::Http::UploadedFile)
-      DotenvContents.call(file.read(DotenvContents::MAX_BYTES + 1).to_s)
+    result = UploadCreation.call(params.permit(:file)[:file])
+    if result.error
+      @error = result.error
+      render :new, status: :unprocessable_content
     else
-      DotenvContents::Result.new(nil, "Choose a dotenv file to upload.")
+      redirect_to file_path(result.upload), status: :see_other
     end
-    @variables = result.variables
-    @error = result.error
-    render :new, status: @error ? :unprocessable_content : :ok
+  end
+
+  def show
+    @upload = Upload.find_by!(public_id: params[:id])
+    @variables = DotenvContents.call(@upload.file.download).variables
+  end
+
+  private
+
+  def prevent_caching
+    response.headers["Cache-Control"] = "no-store"
   end
 end

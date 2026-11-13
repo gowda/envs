@@ -24,9 +24,9 @@ class EnvFilesController < ApplicationController
     bucket = ENV["ENVS_S3_BUCKET"].presence
     if bucket
       count = EnvFileRefresh.call(bucket: bucket, prefix: ENV.fetch("ENVS_S3_PREFIX", ""))
-      redirect_to root_path, notice: "Refreshed #{count} dotenv files from S3."
+      redirect_to s3_path, notice: "Refreshed #{count} dotenv #{"file".pluralize(count)} from S3."
     else
-      redirect_to root_path, alert: "Set ENVS_S3_BUCKET, AWS_REGION and ENVS_ENCRYPTION_KEY before refreshing."
+      redirect_to s3_path, alert: "Set ENVS_S3_BUCKET, AWS_REGION and ENVS_ENCRYPTION_KEY before refreshing."
     end
   end
 
@@ -37,27 +37,27 @@ class EnvFilesController < ApplicationController
   end
 
   def aws_error(error)
-    redirect_to root_path, alert: "S3 refresh failed (#{error.code})."
+    redirect_to s3_path, alert: "S3 refresh failed (#{error.code})."
   end
 
   def networking_error
-    redirect_to root_path, alert: "S3 cannot be reached."
+    redirect_to s3_path, alert: "S3 cannot be reached."
   end
 
   def expired_login
-    redirect_to root_path, alert: "The AWS login has expired. Sign in again."
+    redirect_to s3_path, alert: "The AWS login has expired. Sign in again."
   end
 
   def missing_profile
-    redirect_to root_path, alert: "The AWS profile does not exist."
+    redirect_to s3_path, alert: "The AWS profile does not exist."
   end
 
   def missing_region
-    redirect_to root_path, alert: "Set AWS_REGION before refreshing from S3."
+    redirect_to s3_path, alert: "Set AWS_REGION before refreshing from S3."
   end
 
   def missing_credentials
-    redirect_to root_path, alert: "Configure AWS credentials before refreshing from S3."
+    redirect_to s3_path, alert: "Configure AWS credentials before refreshing from S3."
   end
 
   def missing_encryption_key
@@ -67,7 +67,7 @@ class EnvFilesController < ApplicationController
       flash.now[:alert] = message
       render :index
     else
-      redirect_to root_path, alert: message
+      redirect_to s3_path, alert: message
     end
   end
 end
