@@ -19,7 +19,7 @@ class EnvFileRefresh
     EnvFile.transaction do
       @client.list_objects_v2(bucket: @bucket, prefix: @prefix).each_page do |page|
         page.contents.each do |object|
-          next unless dotenv_key?(object.key)
+          next unless env_key?(object.key)
 
           keys << object.key
           save_snapshot(object)
@@ -32,19 +32,19 @@ class EnvFileRefresh
 
   private
 
-  def dotenv_key?(key)
+  def env_key?(key)
     name = File.basename(key)
     !key.end_with?("/") && (name == ".env" || name.start_with?(".env.") || name.end_with?(".env"))
   end
 
   def save_snapshot(object)
     attributes = { etag: object.etag, last_modified: object.last_modified, fetched_at: Time.current }
-    if object.size > DotenvContents::MAX_BYTES
+    if object.size > EnvFileContents::MAX_BYTES
       attributes.merge!(content: nil, too_large: true)
     else
       response = @client.get_object(bucket: @bucket, key: object.key)
-      content = response.body.read(DotenvContents::MAX_BYTES + 1).to_s
-      too_large = content.bytesize > DotenvContents::MAX_BYTES
+      content = response.body.read(EnvFileContents::MAX_BYTES + 1).to_s
+      too_large = content.bytesize > EnvFileContents::MAX_BYTES
       attributes.merge!(content: too_large ? nil : content, too_large: too_large,
         etag: response.etag, last_modified: response.last_modified)
     end

@@ -1,6 +1,6 @@
 require "rails_helper"
 
-RSpec.describe "S3 dotenv files", type: :request do
+RSpec.describe "S3 env files", type: :request do
   include ActiveSupport::Testing::TimeHelpers
 
   let(:bucket) { "invented-envs-bucket" }
@@ -50,7 +50,7 @@ RSpec.describe "S3 dotenv files", type: :request do
     expect(document.at_css("header img").parent["href"]).to eq(files_path)
     expect(document.css("header span")).to be_empty
     expect(document.at_css("header").text).not_to include("envs")
-    expect(document.at_css("title").text).to eq("S3 dotenv files · envs")
+    expect(document.at_css("title").text).to eq("S3 env files · envs")
     expect(document.at_css("time")["title"]).to eq(modified.iso8601)
     expect(document.at_css("form")["action"]).to eq("/s3/refresh")
     get s3_file_path(EnvFile.first!)
@@ -61,11 +61,11 @@ RSpec.describe "S3 dotenv files", type: :request do
 
   it "uses singular and plural refresh messages" do
     refresh
-    expect(document.at_css(".flash-success").text).to eq("Refreshed 1 dotenv file from S3.")
+    expect(document.at_css(".flash-success").text).to eq("Refreshed 1 env file from S3.")
     contents["invented/app.env"] = "APP=invented"
     client.stub_responses(:list_objects_v2, contents: [ object("invented/.env"), object("invented/app.env") ])
     refresh
-    expect(document.at_css(".flash-success").text).to eq("Refreshed 2 dotenv files from S3.")
+    expect(document.at_css(".flash-success").text).to eq("Refreshed 2 env files from S3.")
   end
 
   it "refreshes every page, selects all three name patterns and displays cards and errors" do
@@ -75,13 +75,13 @@ RSpec.describe "S3 dotenv files", type: :request do
       { contents: [ object("invented/.env"), object("invented/.env.production") ],
         is_truncated: true, next_continuation_token: "invented-next-page" },
       { contents: [ object("invented/app.env"), object("invented/bad.env"),
-        object("invented/big.env", size: DotenvContents::MAX_BYTES + 1), object("invented/ignored.txt"),
+        object("invented/big.env", size: EnvFileContents::MAX_BYTES + 1), object("invented/ignored.txt"),
         object("invented/.env.directory/") ], is_truncated: false }
     ])
 
     refresh
 
-    expect(document.at_css(".flash-success").text).to eq("Refreshed 5 dotenv files from S3.")
+    expect(document.at_css(".flash-success").text).to eq("Refreshed 5 env files from S3.")
     expect(EnvFile.count).to eq(5)
     listings = client.api_requests.select { |request| request[:operation_name] == :list_objects_v2 }
     expect(listings.map { |request| request[:params] }).to eq([
@@ -90,12 +90,12 @@ RSpec.describe "S3 dotenv files", type: :request do
     ])
     downloads = client.api_requests.select { |request| request[:operation_name] == :get_object }
     expect(downloads.map { |request| request[:params][:key] }).to match_array(contents.keys)
-    cards = document.css('[aria-label="Dotenv files"] a.Box')
+    cards = document.css('[aria-label="Env files"] a.Box')
     expect(cards.size).to eq(5)
     expect(cards.map { |card| card.at_css("h2").text }).to include(".env", ".env.production", "app.env")
     expect(cards.first.text).to include("invented/.env", "2 variables", "Updated 13 days ago")
     expect(cards.first["href"]).to eq(s3_file_path(EnvFile.find_by!(key: "invented/.env")))
-    expect(document.text).to include("Invalid dotenv file", "Too large")
+    expect(document.text).to include("Invalid env file", "Too large")
     expect(document.text).not_to include("invented-value", "ignored.txt")
     expect(document.css("script").map { |tag| tag["type"] }).to eq(%w[importmap module])
     expect(response.headers["Cache-Control"]).to eq("no-store")
@@ -104,15 +104,15 @@ RSpec.describe "S3 dotenv files", type: :request do
       .to eq("etag" => '"invented-etag"', "last_modified" => modified, "fetched_at" => Time.current)
 
     get s3_file_path(EnvFile.find_by!(key: "invented/bad.env"))
-    expect(document.at_css(".flash-error").text).to eq(DotenvContents::INVALID_MESSAGE)
+    expect(document.at_css(".flash-error").text).to eq(EnvFileContents::INVALID_MESSAGE)
     expect(document.css("section")).to be_empty
 
     get s3_file_path(EnvFile.find_by!(key: "invented/big.env"))
-    expect(document.at_css(".flash-error").text).to eq(DotenvContents::TOO_LARGE_MESSAGE)
+    expect(document.at_css(".flash-error").text).to eq(EnvFileContents::TOO_LARGE_MESSAGE)
   end
 
   it "renders the shared variable list with literal commands, escaped HTML and no caching" do
-    contents["invented/.env"] = "FIRST=invented-value\nMULTI=\"line one\n<script>invented</script>\"\nCOMMAND=$(echo invented)\nREFERENCE=$PATH\n"
+    contents["invented/.env"] = "FIRST=invented-value\nHTML=<script>invented</script>\nCOMMAND=$(echo invented)\nREFERENCE=$PATH\n"
     refresh
     file = EnvFile.find_by!(bucket: bucket, key: "invented/.env")
 
@@ -121,13 +121,13 @@ RSpec.describe "S3 dotenv files", type: :request do
     expect(response).to have_http_status(:ok)
     expect(document.at_css("h1").text).to eq(".env")
     expect(document.css("section .Box-row").size).to eq(4)
-    expect(document.at_css("section pre").text).to eq("line one\n<script>invented</script>")
+    expect(document.css("section .col-8")[1].text).to eq("<script>invented</script>")
     expect(document.text).to include("invented-value", "$(echo invented)", "$PATH")
     expect(document.css("script").map { |tag| tag["type"] }).to eq(%w[importmap module])
     expect(response.headers["Cache-Control"]).to eq("no-store")
     expect(document.css("header a").map { |link| link["href"] }).to eq([ files_path, files_path, s3_path ])
     raw = EnvFile.connection.select_value("SELECT content FROM env_files WHERE id = #{file.id.to_i}")
-    expect(raw).not_to include("invented-value", "FIRST", "MULTI")
+    expect(raw).not_to include("invented-value", "FIRST", "HTML")
     expect(JSON.parse(raw)).to have_key("p")
     expect(file.content).to eq(contents["invented/.env"])
     expect(file.inspect).not_to include("invented-value")
@@ -171,18 +171,18 @@ RSpec.describe "S3 dotenv files", type: :request do
   end
 
   it "round-trips a file exactly 1 MB" do
-    contents["invented/.env"] = "KEY=" + "a" * (DotenvContents::MAX_BYTES - 4)
-    client.stub_responses(:list_objects_v2, contents: [ object("invented/.env", size: DotenvContents::MAX_BYTES) ])
+    contents["invented/.env"] = ("KEY=" + "a" * 65_531 + "\n") * 16
+    client.stub_responses(:list_objects_v2, contents: [ object("invented/.env", size: EnvFileContents::MAX_BYTES) ])
 
     refresh
 
     expect(EnvFile.first!.content).to eq(contents["invented/.env"])
     get s3_file_path(EnvFile.first!)
-    expect(document.at_css("section .col-8").text.bytesize).to eq(DotenvContents::MAX_BYTES - 4)
+    expect(document.css("section .col-8").map { |node| node.text.bytesize }).to eq([ 65_531 ] * 16)
   end
 
   it "limits a download if an object grew after listing" do
-    contents["invented/.env"] = "KEY=" + "a" * DotenvContents::MAX_BYTES
+    contents["invented/.env"] = "KEY=" + "a" * EnvFileContents::MAX_BYTES
 
     refresh
 
