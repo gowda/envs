@@ -1,3 +1,7 @@
+body {
+  min-height: 100vh;
+}
+
 .variable-text {
   white-space: pre-wrap;
   overflow-wrap: anywhere;

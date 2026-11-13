@@ -1,7 +1,7 @@
 Rails.application.routes.draw do
   get "up" => "rails/health#show", as: :rails_health_check
 
-  root to: redirect("/files")
+  root to: redirect("/files", status: 302)
   get "files", to: "uploads#new", as: :files
   post "files", to: "uploads#create"
   get "files/:id", to: "uploads#show", as: :file

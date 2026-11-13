@@ -44,7 +44,12 @@ RSpec.describe "S3 dotenv files", type: :request do
   it "uses the S3 paths, lowercase brand and current section" do
     refresh
     expect(document.at_css('header [aria-current="page"]').text).to eq("Amazon S3")
-    expect(document.at_css("header span").text).to eq("envs")
+    expect(document.css("header img").size).to eq(1)
+    expect(document.at_css("header img")["alt"]).to eq("envs")
+    expect(document.at_css("header img")["height"]).to eq("32")
+    expect(document.at_css("header img").parent["href"]).to eq(files_path)
+    expect(document.css("header span")).to be_empty
+    expect(document.at_css("header").text).not_to include("envs")
     expect(document.at_css("title").text).to eq("S3 dotenv files · envs")
     expect(document.at_css("time")["title"]).to eq(modified.iso8601)
     expect(document.at_css("form")["action"]).to eq("/s3/refresh")
@@ -120,7 +125,7 @@ RSpec.describe "S3 dotenv files", type: :request do
     expect(document.text).to include("invented-value", "$(echo invented)", "$PATH")
     expect(document.css("script").map { |tag| tag["type"] }).to eq(%w[importmap module])
     expect(response.headers["Cache-Control"]).to eq("no-store")
-    expect(document.css("header a").map { |link| link["href"] }).to eq([ files_path, s3_path ])
+    expect(document.css("header a").map { |link| link["href"] }).to eq([ files_path, files_path, s3_path ])
     raw = EnvFile.connection.select_value("SELECT content FROM env_files WHERE id = #{file.id.to_i}")
     expect(raw).not_to include("invented-value", "FIRST", "MULTI")
     expect(JSON.parse(raw)).to have_key("p")

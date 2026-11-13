@@ -33,8 +33,21 @@ RSpec.describe "Dotenv uploads", type: :request do
     ])
   end
 
+  it "links exactly one SVG favicon for each colour scheme" do
+    get files_path
+
+    icons = document.css('link[rel="icon"]')
+    expect(icons.size).to eq(2)
+    expect(icons.map { |icon| [ icon["href"], icon["media"], icon["type"] ] }).to eq([
+      [ "/filled-light-mode.svg", "(prefers-color-scheme: light)", "image/svg+xml" ],
+      [ "/filled-dark-mode.svg", "(prefers-color-scheme: dark)", "image/svg+xml" ]
+    ])
+    expect(document.css('link[href="/icon.png"], link[href="/icon.svg"]')).to be_empty
+  end
+
   it "redirects the root to the upload page" do
     get root_path
+    expect(response).to have_http_status(:found)
     expect(response).to redirect_to(files_path)
   end
 
@@ -71,11 +84,16 @@ RSpec.describe "Dotenv uploads", type: :request do
 
   it "marks the upload section and uses the lowercase brand" do
     get files_path
-    expect(document.css("header a").map { |link| [ link.text, link["href"] ] }).to eq([
+    expect(document.css("header a.Header-link").map { |link| [ link.text, link["href"] ] }).to eq([
       [ "File upload", files_path ], [ "Amazon S3", s3_path ]
     ])
     expect(document.css('header [aria-current="page"]').map(&:text)).to eq([ "File upload" ])
-    expect(document.at_css("header span").text).to eq("envs")
+    expect(document.css("header img").size).to eq(1)
+    expect(document.at_css("header img")["alt"]).to eq("envs")
+    expect(document.at_css("header img")["height"]).to eq("32")
+    expect(document.at_css("header img").parent["href"]).to eq(files_path)
+    expect(document.css("header span")).to be_empty
+    expect(document.at_css("header").text).not_to include("envs")
     expect(document.at_css("title").text).to eq("File upload · envs")
     upload("INVENTED=value")
     expect(document.css('header [aria-current="page"]').map(&:text)).to eq([ "File upload" ])
