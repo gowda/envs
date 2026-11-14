@@ -36,7 +36,8 @@ The app reads files as Docker and Amazon ECS do. Each entry uses one line.
 - Quotes do not join lines. Values cannot span lines.
 - Shell commands, variable references and escape sequences stay literal.
 - Repeated names remain separate entries in file order. Each repeated name has a Duplicate label.
-- Lines without `=` have a warning with their line numbers. The app does not read the host environment.
+- A line without `=` is invalid if its name contains a space or a tab after leading whitespace is removed.
+- Other lines without `=` have a warning with their line numbers. The app does not read the host environment.
 - Docker takes these values from the host environment or drops these lines. ECS gives these lines no value.
 - Invalid files show an error. Errors identify the line and reason without showing a value.
 

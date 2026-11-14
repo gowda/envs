@@ -1,5 +1,11 @@
 <% if result.unassigned_lines.any? %>
-  <div class="flash flash-warn mb-3" role="alert">Lines <%= result.unassigned_lines.join(", ") %> have no =. A container gets no value from these lines.</div>
+  <div class="flash flash-warn mb-3" role="alert">
+    <% if result.unassigned_lines.one? %>
+      Line <%= result.unassigned_lines.first %> has no =. A container gets no value from this line.
+    <% else %>
+      Lines <%= result.unassigned_lines.join(", ") %> have no =. A container gets no value from these lines.
+    <% end %>
+  </div>
 <% end %>
 <% counts = result.entries.map(&:name).tally %>
 <section aria-label="Variables" class="Box">

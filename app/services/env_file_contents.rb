@@ -25,11 +25,6 @@ class EnvFileContents
       next if line.empty? || line.start_with?("#")
 
       name, separator, value = line.partition("=")
-      if separator.empty?
-        unassigned_lines << number
-        next
-      end
-
       reason = if name.empty?
         "the name before = is empty."
       elsif name.include?(" ")
@@ -38,6 +33,11 @@ class EnvFileContents
         "the name holds a tab."
       end
       return Result.new([], "Line #{number}: #{reason}", []) if reason
+
+      if separator.empty?
+        unassigned_lines << number
+        next
+      end
 
       entries << Entry.new(number, name, value)
     end

@@ -77,20 +77,28 @@ RSpec.describe "Container env file contents", type: :request do
       end
 
       it "warns about lines without = and does not use the host environment" do
-        show_contents("PATH\nKEY=value\nUNSET_INVENTED\nno assignment\n")
+        show_contents("PATH\nKEY=value\nUNSET_INVENTED\n")
 
         expect(response).to have_http_status(:ok)
         expect(document.css("section .col-4").map(&:text)).to eq([ "KEY" ])
         warning = document.at_css(".flash-warn")
-        expect(warning.text).to eq("Lines 1, 3, 4 have no =. A container gets no value from these lines.")
+        expect(warning.text.strip).to eq("Lines 1, 3 have no =. A container gets no value from these lines.")
         expect(response.body.index('class="flash flash-warn')).to be < response.body.index('<section')
+      end
+
+      it "uses the singular warning for one valid name without =" do
+        show_contents("KEY=value\nBARE\n")
+
+        expect(response).to have_http_status(:ok)
+        expect(document.css("section .col-4").map(&:text)).to eq([ "KEY" ])
+        expect(document.at_css(".flash-warn").text.strip).to eq("Line 2 has no =. A container gets no value from this line.")
       end
 
       it "does not join quoted lines" do
         show_contents("KEY=\"first\nsecond\"\nNEXT=last\n")
 
         expect(document.css("section .col-8").map(&:text)).to eq([ '"first', "last" ])
-        expect(document.at_css(".flash-warn").text).to include("Lines 2 have no =")
+        expect(document.at_css(".flash-warn").text).to include("Line 2 has no =")
       end
 
       it "shows commands and references literally without executing or loading them" do
@@ -107,6 +115,9 @@ RSpec.describe "Container env file contents", type: :request do
       [
         [ "=private-value", "the name before = is empty." ],
         [ "A B=private-value", "the name holds a space." ],
+        [ "some note here", "the name holds a space." ],
+        [ "FOO\tBAR", "the name holds a tab." ],
+        [ "BARE ", "the name holds a space." ],
         [ "KEY =private-value", "the name holds a space." ],
         [ "A\tB=private-value", "the name holds a tab." ],
         [ "KEY=" + "private-value" * 5_042, "the line exceeds 65,536 bytes." ],

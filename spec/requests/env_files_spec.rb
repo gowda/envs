@@ -104,7 +104,7 @@ RSpec.describe "S3 env files", type: :request do
       .to eq("etag" => '"invented-etag"', "last_modified" => modified, "fetched_at" => Time.current)
 
     get s3_file_path(EnvFile.find_by!(key: "invented/bad.env"))
-    expect(document.at_css(".flash-error").text).to eq(EnvFileContents::INVALID_MESSAGE)
+    expect(document.at_css(".flash-error").text).to eq("Line 1: the name holds a space.")
     expect(document.css("section")).to be_empty
 
     get s3_file_path(EnvFile.find_by!(key: "invented/big.env"))
