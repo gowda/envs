@@ -98,6 +98,8 @@ Active Storage keeps uploads on local disk under `storage/`; test uploads use `t
 
 ## Development
 
+A coding agent reads [AGENTS.md](AGENTS.md).
+
 You can also start the server with `bin/rails server`. Run `bundle exec rspec` for specs and `bin/ci` for local checks and specs. Examples and test files use invented values; don't commit secrets.
 
 The interface uses vendored Primer CSS 21.5.1 under the MIT licence.
