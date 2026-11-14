@@ -8,7 +8,7 @@ envs is a web app with the look of GitHub for people who inspect container confi
 
 envs shows a value exactly as a container gets it. A dotenv library reads the same file differently.
 
-Save this invented example as `postgres.env`:
+An invented PostgreSQL configuration:
 
 ```env
 # PostgreSQL container settings
@@ -21,7 +21,7 @@ PGDATA=/var/lib/postgresql/data/pgdata
 TZ=UTC
 ```
 
-For `POSTGRES_INITDB_ARGS`, the container gets the quotes too. envs keeps them visible so you can see what your container receives.
+For `POSTGRES_INITDB_ARGS`, containers keep the double quotes as part of the value, while dotenv libraries remove them. The two disagree; envs shows what the container gets.
 
 ## Quick start
 
@@ -46,7 +46,7 @@ You need Ruby 3.4.12 and Bundler. The app uses Rails 8.1 and SQLite.
    ```
 
 4. Open <http://localhost:3000>, which redirects to `/files`.
-5. Drop an env file on the page to see its variable list.
+5. Save the example from **Why** as `postgres.env` and drop it on the page. The list shows seven variables, and the value of `POSTGRES_INITDB_ARGS` includes its quotes.
 
 ## Use
 
@@ -85,13 +85,13 @@ The first `=` separates a name from its literal value. Quotes, spaces, commands 
 
 ## How it works
 
-SQLite holds S3 snapshots and local edits, with their content encrypted through Active Record encryption. Editing changes the local snapshot's displayed value until you publish. A publish uses the stored ETag, S3's object identifier, as a condition to avoid overwriting a changed object.
+SQLite holds S3 snapshots and local edits, with their content encrypted through Active Record encryption. Local edits are stored beside the snapshot and shown on the page. The snapshot changes only after a publish succeeds. An ETag is a tag that S3 changes when an object's content changes. A publish uses the stored ETag as a condition to avoid overwriting a changed object.
 
 Active Storage keeps uploads on local disk under `storage/`; test uploads use `tmp/storage/`. Stimulus through importmap handles file selection and drop uploads. The app does not load uploaded variables into its environment.
 
 ## Limits
 
-- No login; a stored upload's page needs no session.
+- The app has no login. Each person who can reach the app can see every file and can publish. A stored upload's page needs no session.
 - Stored uploads are unencrypted and cannot be deleted in the app.
 - Only valid S3 files are editable.
 - Publishing does not keep object tags, the ACL (access control list), cache settings or storage class.
