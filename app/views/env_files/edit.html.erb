@@ -1,0 +1,13 @@
+<% content_for :title, "Edit #{@name} · envs" %>
+<div class="Subhead"><h1 class="Subhead-heading">Edit variable</h1></div>
+<p class="text-mono variable-text"><%= @env_file.key %></p>
+<% if @error %><div class="flash flash-error mb-3" role="alert"><%= @error %></div><% end %>
+<%= form_with url: edit_s3_variable_path(@env_file), method: :post, local: true do |form| %>
+  <%= form.hidden_field :name, value: @name %>
+  <div class="form-group">
+    <div class="form-group-header"><%= form.label :value, @name, class: "text-mono variable-text" %></div>
+    <div class="form-group-body"><%= form.text_field :value, value: @value, class: "form-control input-block text-mono", autocomplete: "off", spellcheck: false %></div>
+  </div>
+  <%= form.submit "Save", class: "btn btn-primary" %>
+  <%= link_to "Cancel", s3_file_path(@env_file), class: "btn" %>
+<% end %>

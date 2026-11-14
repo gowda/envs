@@ -59,6 +59,17 @@ RSpec.describe "S3 env files", type: :request do
     expect(document.at_css("title").text).to eq(".env · envs")
   end
 
+  it "labels only cards whose files have repeated names" do
+    contents["invented/.env"] = "SAME=one\nSAME=two\n"
+    contents["invented/unique.env"] = "FIRST=one\nSECOND=two\n"
+    client.stub_responses(:list_objects_v2, contents: [ object("invented/.env"), object("invented/unique.env") ])
+    refresh
+    repeated = EnvFile.find_by!(key: "invented/.env")
+    unique = EnvFile.find_by!(key: "invented/unique.env")
+    expect(document.at_css("a[href='#{s3_file_path(repeated)}']").css(".Label").map(&:text)).to include("Repeated names")
+    expect(document.at_css("a[href='#{s3_file_path(unique)}']").css(".Label").map(&:text)).not_to include("Repeated names")
+  end
+
   it "uses singular and plural refresh messages" do
     refresh
     expect(document.at_css(".flash-success").text).to eq("Refreshed 1 env file from S3.")
@@ -121,7 +132,7 @@ RSpec.describe "S3 env files", type: :request do
     expect(response).to have_http_status(:ok)
     expect(document.at_css("h1").text).to eq(".env")
     expect(document.css("section .Box-row").size).to eq(4)
-    expect(document.css("section .col-8")[1].text).to eq("<script>invented</script>")
+    expect(document.css("section .variable-value")[1].text).to eq("<script>invented</script>")
     expect(document.text).to include("invented-value", "$(echo invented)", "$PATH")
     expect(document.css("script").map { |tag| tag["type"] }).to eq(%w[importmap module])
     expect(response.headers["Cache-Control"]).to eq("no-store")
@@ -178,7 +189,7 @@ RSpec.describe "S3 env files", type: :request do
 
     expect(EnvFile.first!.content).to eq(contents["invented/.env"])
     get s3_file_path(EnvFile.first!)
-    expect(document.css("section .col-8").map { |node| node.text.bytesize }).to eq([ 65_531 ] * 16)
+    expect(document.css("section .variable-value").map { |node| node.text.bytesize }).to eq([ 65_531 ] * 16)
   end
 
   it "limits a download if an object grew after listing" do

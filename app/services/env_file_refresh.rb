@@ -48,6 +48,8 @@ class EnvFileRefresh
       attributes.merge!(content: too_large ? nil : content, too_large: too_large,
         etag: response.etag, last_modified: response.last_modified)
     end
-    EnvFile.find_or_initialize_by(bucket: @bucket, key: object.key).update!(attributes)
+    file = EnvFile.find_or_initialize_by(bucket: @bucket, key: object.key)
+    file.update!(attributes)
+    EnvFileEditing.reconcile(file)
   end
 end

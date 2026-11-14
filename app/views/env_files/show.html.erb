@@ -3,8 +3,16 @@
   <h1 class="Subhead-heading variable-text"><%= @env_file.file_name %></h1>
 </div>
 <p class="text-mono color-fg-muted variable-text"><%= @env_file.key %></p>
+<div class="d-flex flex-wrap flex-items-center mb-3">
+  <% if @edits.any? %>
+    <%= link_to "Review & publish", review_s3_file_path(@env_file), class: "btn btn-primary mr-2" %>
+    <%= button_to "Discard changes", discard_s3_changes_path(@env_file), class: "btn btn-danger" %>
+  <% else %>
+    <button class="btn mr-2" disabled>Review &amp; publish</button>
+  <% end %>
+</div>
 <% if @result.error %>
   <div class="flash flash-error" role="alert"><%= @result.error %></div>
 <% else %>
-  <%= render "variables/list", result: @result %>
+  <%= render "variables/list", result: @result, env_file: @env_file, edits: @edits %>
 <% end %>

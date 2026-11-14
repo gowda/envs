@@ -1,0 +1,20 @@
+<% content_for :title, "Review #{@env_file.file_name} · envs" %>
+<div class="Subhead"><h1 class="Subhead-heading">Review &amp; publish</h1></div>
+<p class="text-mono variable-text"><%= @env_file.key %></p>
+<div class="Box overflow-auto mb-3">
+  <table class="env-diff width-full text-mono" aria-label="File difference">
+    <thead class="sr-only"><tr><th>Old line</th><th>New line</th><th>Change</th><th>Text</th></tr></thead>
+    <tbody>
+      <% @rows.each do |row| %>
+        <tr class="diff-<%= row.kind %>">
+          <td class="diff-number"><%= row.old_number %></td>
+          <td class="diff-number"><%= row.new_number %></td>
+          <td class="diff-marker"><%= row.marker %></td>
+          <td class="diff-text"><%= row.text %></td>
+        </tr>
+      <% end %>
+    </tbody>
+  </table>
+</div>
+<% if @env_file.pending_edits.any? %><%= button_to "Publish", publish_s3_file_path(@env_file), class: "btn btn-primary mb-2" %><% end %>
+<%= link_to "Cancel", s3_file_path(@env_file), class: "btn" %>

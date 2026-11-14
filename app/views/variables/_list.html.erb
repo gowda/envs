@@ -7,13 +7,31 @@
     <% end %>
   </div>
 <% end %>
-<% counts = result.entries.map(&:name).tally %>
+<% entries_by_name = result.entries.group_by(&:name) %>
+<% repeated_names = entries_by_name.select { |_name, entries| entries.many? } %>
+<% if repeated_names.any? %>
+  <div class="flash flash-warn mb-3" role="alert" aria-label="Repeated names">
+    <% repeated_names.each do |name, entries| %>
+      <p class="mb-0 variable-text"><%= name %> is on lines <%= entries.map(&:line_number).to_sentence(last_word_connector: " and ") %>. Only line <%= entries.last.line_number %> takes effect.</p>
+    <% end %>
+  </div>
+<% end %>
 <section aria-label="Variables" class="Box">
   <div class="Box-header"><h2 class="Box-title">Variables <span class="Label"><%= result.entries.size %></span></h2></div>
   <% result.entries.each do |entry| %>
+    <% effective = entries_by_name.fetch(entry.name).last == entry %>
+    <% edit = effective ? local_assigns.fetch(:edits, {})[entry.name] : nil %>
+    <% value = edit ? edit.value : entry.value %>
     <div class="Box-row d-flex">
-      <div class="col-4 pr-3"><span class="text-mono text-bold variable-text"><%= entry.name %></span><% if counts[entry.name] > 1 %> <span class="Label">Duplicate</span><% end %></div>
-      <div class="col-8 text-mono variable-text"><%= entry.value %></div>
+      <div class="col-4 pr-3"><span class="text-mono text-bold variable-text"><%= entry.name %></span><% unless effective %> <span class="Label">Overridden</span><% end %></div>
+      <div class="col-8">
+        <span class="text-mono variable-text variable-value"><%= value %></span>
+        <% if edit %><span class="Label Label--accent">Modified</span><% end %>
+        <% if value.match?(/\A[ \t]|[ \t]\z/) %><span class="Label">Leading or trailing whitespace</span><% end %>
+        <% if local_assigns[:env_file] && effective %>
+          <%= link_to "Edit", edit_s3_variable_path(env_file, name: entry.name), class: "ml-2" %>
+        <% end %>
+      </div>
     </div>
   <% end %>
 </section>
