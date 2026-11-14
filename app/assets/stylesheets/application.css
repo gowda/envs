@@ -26,3 +26,43 @@ body.upload-dragging {
   outline: 4px solid var(--borderColor-accent-emphasis, #0969da);
   outline-offset: -4px;
 }
+
+.env-diff {
+  border-collapse: collapse;
+}
+
+.diff-number {
+  width: 1%;
+  min-width: 3em;
+  padding: 0 10px;
+  text-align: right;
+  color: var(--fgColor-muted);
+  user-select: none;
+}
+
+.diff-marker {
+  width: 1%;
+  padding: 0 8px;
+  white-space: pre;
+}
+
+.diff-text {
+  white-space: pre;
+  padding-right: 16px;
+}
+
+.diff-addition {
+  background: var(--diffBlob-addition-bgColor-line);
+}
+
+.diff-addition .diff-number {
+  background: var(--diffBlob-addition-bgColor-num);
+}
+
+.diff-deletion {
+  background: var(--diffBlob-deletion-bgColor-line);
+}
+
+.diff-deletion .diff-number {
+  background: var(--diffBlob-deletion-bgColor-num);
+}

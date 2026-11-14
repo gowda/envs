@@ -43,10 +43,19 @@ RSpec.describe "Container env file contents", type: :request do
         expect(response).to have_http_status(:ok)
         rows = document.css("section .Box-row")
         expect(rows.map { |row| row.at_css(".col-4").text }).to eq(values.each_index.map { |index| "KEY#{index}" })
-        expect(rows.map { |row| row.at_css(".col-8").text }).to eq(values)
+        expect(rows.map { |row| row.at_css(".variable-value").text }).to eq(values)
         expect(rows.all? { |row| row.element_children.size == 2 }).to be(true)
         expect(document.css("pre")).to be_empty
         expect(document.css("script").map { |tag| tag["type"] }).to eq(%w[importmap module])
+      end
+
+      it "labels whitespace on values for every source and allows no upload edits" do
+        show_contents("FIRST= padded \nSECOND=\tvalue\t\nTHIRD=plain\n")
+        rows = document.css("section .Box-row")
+        expect(rows.map { |row| row.at_css(".variable-value").text }).to eq([ " padded ", "\tvalue\t", "plain" ])
+        expect(rows.map { |row| row.css(".Label").map(&:text) })
+          .to eq([ [ "Leading or trailing whitespace" ], [ "Leading or trailing whitespace" ], [] ])
+        expect(document.css("a").map(&:text)).not_to include("Edit") if source == :upload
       end
 
       it "removes the first BOM and CRLF endings and skips indented comments and blank lines" do
@@ -54,7 +63,7 @@ RSpec.describe "Container env file contents", type: :request do
 
         expect(response).to have_http_status(:ok)
         expect(document.css("section .col-4").map(&:text)).to eq(%w[FIRST SECOND])
-        expect(document.css("section .col-8").map(&:text)).to eq(%w[value two])
+        expect(document.css("section .variable-value").map(&:text)).to eq(%w[value two])
       end
 
       it "keeps a BOM on later lines" do
@@ -67,7 +76,7 @@ RSpec.describe "Container env file contents", type: :request do
         show_contents("SAME=one\nOTHER=middle\nSAME=two\n")
 
         rows = document.css("section .Box-row")
-        expect(rows.map { |row| row.at_css(".col-8").text }).to eq(%w[one middle two])
+        expect(rows.map { |row| row.at_css(".variable-value").text }).to eq(%w[one middle two])
         expect(rows.map { |row| row.css(".Label").map(&:text) }).to eq([ [ "Duplicate" ], [], [ "Duplicate" ] ])
         expect(document.at_css("section .Box-title .Label").text).to eq("3")
         if source == :s3
@@ -97,7 +106,7 @@ RSpec.describe "Container env file contents", type: :request do
       it "does not join quoted lines" do
         show_contents("KEY=\"first\nsecond\"\nNEXT=last\n")
 
-        expect(document.css("section .col-8").map(&:text)).to eq([ '"first', "last" ])
+        expect(document.css("section .variable-value").map(&:text)).to eq([ '"first', "last" ])
         expect(document.at_css(".flash-warn").text).to include("Line 2 has no =")
       end
 
@@ -105,7 +114,7 @@ RSpec.describe "Container env file contents", type: :request do
         marker = Rails.root.join("tmp", "env-command-#{SecureRandom.hex}")
         show_contents("COMMAND=$(touch #{marker})\nREFERENCE=$PATH\nBRACED=${PATH}\nPATH=invented-path\n")
 
-        expect(document.css("section .col-8").map(&:text)).to eq([ "$(touch #{marker})", "$PATH", "${PATH}", "invented-path" ])
+        expect(document.css("section .variable-value").map(&:text)).to eq([ "$(touch #{marker})", "$PATH", "${PATH}", "invented-path" ])
         expect(File.exist?(marker)).to be(false)
         expect(ENV.fetch("PATH")).not_to eq("invented-path")
       ensure
@@ -145,7 +154,7 @@ RSpec.describe "Container env file contents", type: :request do
         show_contents("KEY=" + "a" * 65_532)
 
         expect(response).to have_http_status(:ok)
-        expect(document.at_css("section .col-8").text).to eq("a" * 65_532)
+        expect(document.at_css("section .variable-value").text).to eq("a" * 65_532)
       end
 
       it "accepts a file of exactly 1 MB with valid line sizes" do

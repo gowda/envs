@@ -121,7 +121,7 @@ RSpec.describe "S3 env files", type: :request do
     expect(response).to have_http_status(:ok)
     expect(document.at_css("h1").text).to eq(".env")
     expect(document.css("section .Box-row").size).to eq(4)
-    expect(document.css("section .col-8")[1].text).to eq("<script>invented</script>")
+    expect(document.css("section .variable-value")[1].text).to eq("<script>invented</script>")
     expect(document.text).to include("invented-value", "$(echo invented)", "$PATH")
     expect(document.css("script").map { |tag| tag["type"] }).to eq(%w[importmap module])
     expect(response.headers["Cache-Control"]).to eq("no-store")
@@ -178,7 +178,7 @@ RSpec.describe "S3 env files", type: :request do
 
     expect(EnvFile.first!.content).to eq(contents["invented/.env"])
     get s3_file_path(EnvFile.first!)
-    expect(document.css("section .col-8").map { |node| node.text.bytesize }).to eq([ 65_531 ] * 16)
+    expect(document.css("section .variable-value").map { |node| node.text.bytesize }).to eq([ 65_531 ] * 16)
   end
 
   it "limits a download if an object grew after listing" do

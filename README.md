@@ -53,7 +53,7 @@ Settings and secrets come from environment variables. Restart the app after you 
 | `ENVS_ENCRYPTION_KEY` | Required primary key for Active Record encryption of snapshot content. |
 
 - Configure credentials through the standard AWS credential chain.
-- Grant `s3:ListBucket` on the bucket and `s3:GetObject` on the selected objects.
+- Grant `s3:ListBucket` on the bucket and `s3:GetObject` and `s3:PutObject` on the selected objects.
 - Generate an encryption key with `openssl rand -hex 32`.
 - Keep the encryption key stable and store it securely. Existing snapshots require the same key.
 - The app uses a fixed salt for key derivation. It does not use Rails credentials.
@@ -61,6 +61,15 @@ Settings and secrets come from environment variables. Restart the app after you 
 - The app selects base names that are `.env`, start with `.env.`, or end with `.env`.
 - Files over 1 MB have an error label. The app does not download them.
 - Invalid files have an error label. Their content stays encrypted in the local snapshot.
-- Refresh replaces local snapshots. Editing and publishing are not available.
+- Select **Edit** on a variable to save a local change for that occurrence.
+- Values stay literal. An empty value is valid. A value must use UTF-8 and must not contain CR or LF.
+- A Modified label identifies each changed row and file card.
+- A Leading or trailing whitespace label identifies values with spaces or tabs at either end.
+- Select **Discard changes** to remove all local changes for a file.
+- Select **Review & publish** to review the difference, then select **Publish** to write the file to S3.
+- Publish preserves the content type, metadata and encryption settings from S3.
+- If the S3 ETag changed, publish stops. Refresh the snapshots and review the local changes again.
+- Refresh keeps local changes unless their occurrence is gone or the snapshot already contains the new value.
+- Only valid S3 snapshots can be edited. Uploaded files cannot be edited.
 
 The interface uses vendored Primer CSS 21.5.1 under the MIT licence.

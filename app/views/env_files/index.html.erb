@@ -29,6 +29,7 @@
         <%= link_to s3_file_path(file), class: "Box d-block p-3 height-full Link--primary" do %>
           <h2 class="f4 mb-2 variable-text"><%= file.file_name %></h2>
           <p class="text-mono color-fg-muted variable-text"><%= file.key %></p>
+          <% if file.pending_edits.any? %><span class="Label Label--accent">Modified</span><% end %>
           <% if result.error %>
             <span class="Label Label--danger"><%= file.too_large? ? "Too large" : "Invalid env file" %></span>
           <% else %>

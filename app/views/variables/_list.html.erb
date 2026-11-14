@@ -7,13 +7,24 @@
     <% end %>
   </div>
 <% end %>
+<% occurrences = Hash.new(0) %>
 <% counts = result.entries.map(&:name).tally %>
 <section aria-label="Variables" class="Box">
   <div class="Box-header"><h2 class="Box-title">Variables <span class="Label"><%= result.entries.size %></span></h2></div>
   <% result.entries.each do |entry| %>
+    <% occurrences[entry.name] += 1 %>
+    <% edit = local_assigns.fetch(:edits, {})[[entry.name, occurrences[entry.name]]] %>
+    <% value = edit ? edit.value : entry.value %>
     <div class="Box-row d-flex">
       <div class="col-4 pr-3"><span class="text-mono text-bold variable-text"><%= entry.name %></span><% if counts[entry.name] > 1 %> <span class="Label">Duplicate</span><% end %></div>
-      <div class="col-8 text-mono variable-text"><%= entry.value %></div>
+      <div class="col-8">
+        <span class="text-mono variable-text variable-value"><%= value %></span>
+        <% if edit %><span class="Label Label--accent">Modified</span><% end %>
+        <% if value.match?(/\A[ \t]|[ \t]\z/) %><span class="Label">Leading or trailing whitespace</span><% end %>
+        <% if local_assigns[:env_file] %>
+          <%= link_to "Edit", edit_s3_variable_path(env_file, line_number: entry.line_number), class: "ml-2" %>
+        <% end %>
+      </div>
     </div>
   <% end %>
 </section>
