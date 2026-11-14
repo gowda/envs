@@ -15,6 +15,7 @@ The app supports local edits to S3 snapshots and publishes the changes to S3.
 - The S3 client is `aws-sdk-s3`. The settings are `ENVS_S3_BUCKET`, `ENVS_S3_PREFIX` and `AWS_REGION`.
 - The app has no Action Mailer, Action Cable or job queue.
 - The repository is public.
+- Each workflow states its token permissions. The default is `contents: read`.
 
 ## Commands
 
