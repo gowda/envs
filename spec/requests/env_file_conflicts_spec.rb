@@ -4,7 +4,7 @@ RSpec.describe "S3 conflicts", type: :request do
   let(:bucket) { "invented-bucket" }
   let(:client) { Aws::S3::Client.new(stub_responses: true, region: "us-east-1") }
   let(:text) { "FIRST=base-one\nSAME=first\nSAME=last\nOTHER=untouched\n" }
-  let!(:file) { EnvFile.create!(bucket: bucket, key: "invented.env", content: text, etag: '"old"', fetched_at: Time.current) }
+  let!(:file) { create_env_file(bucket: bucket, key: "invented.env", content: text, etag: '"old"', fetched_at: Time.current) }
 
   around do |example|
     previous = ENV["ENVS_S3_BUCKET"]
@@ -253,7 +253,7 @@ RSpec.describe "S3 conflicts", type: :request do
     edit
     choose
     refresh_to(text.sub("base-one", "remote-one").sub("first", "remote-first"))
-    expect { EnvFileRewrite.call(file.reload) }.to raise_error(EnvFileRewrite::Invalid, "Resolve the conflicts before you publish.")
+    expect { EnvFileRewrite.call(file.reload, text: text) }.to raise_error(EnvFileRewrite::Invalid, "Resolve the conflicts before you publish.")
     get review_s3_file_path(file)
     expect(response).to redirect_to(s3_file_path(file))
     expect(flash[:alert]).to eq("Resolve the conflicts before you publish.")
@@ -276,14 +276,15 @@ RSpec.describe "S3 conflicts", type: :request do
     edit
     choose
     client.stub_responses(:put_object, "PreconditionFailed")
-    client.stub_responses(:get_object, body: text.sub("base-one", "remote-one").sub("first", "remote-first"), etag: '"remote"')
+    client.stub_responses(:get_object, [ { body: text, etag: file.etag },
+      { body: text.sub("base-one", "remote-one").sub("first", "remote-first"), etag: '"remote"' } ])
     post publish_s3_file_path(file)
     expect(response).to redirect_to(s3_file_path(file))
-    expect(flash[:alert]).to eq("The file changed in S3. Check the changes again.")
+    expect(flash[:alert]).to eq("The file changed in S3. Check your changes.")
     expect(file.reload.etag).to eq('"remote"')
     expect(PendingEdit.count).to eq(1)
     expect(PendingChoice.count).to eq(1)
-    expect(client.api_requests.map { |request| request[:operation_name] }).to eq(%i[head_object put_object get_object])
+    expect(client.api_requests.map { |request| request[:operation_name] }).to eq(%i[get_object put_object get_object])
     expect(client.api_requests.last[:params]).to include(bucket: bucket, key: file.key)
     follow_redirect!
     expect(conflict_box.css(".Box-row").size).to eq(2)
@@ -348,21 +349,21 @@ RSpec.describe "S3 conflicts", type: :request do
     expect(document.at_css("a.Box").text).not_to include("Deleted in S3")
   end
 
-  [ :head_object, :put_object, :get_object ].each do |operation|
+  [ :put_object, :get_object, :conditional_refresh ].each do |operation|
     it "records a missing object during #{operation} at publish" do
       edit
-      if operation == :get_object
+      if operation == :conditional_refresh
         client.stub_responses(:put_object, "PreconditionFailed")
-        client.stub_responses(:get_object, "NoSuchKey")
+        client.stub_responses(:get_object, [ { body: text, etag: file.etag }, "NoSuchKey" ])
       else
-        client.stub_responses(operation, operation == :head_object ? "NotFound" : "NoSuchKey")
+        client.stub_responses(operation, operation == :get_object ? "NotFound" : "NoSuchKey")
       end
       post publish_s3_file_path(file)
       expect(response).to redirect_to(s3_file_path(file))
       expect(flash[:alert]).to eq("This file is no longer in S3.")
       expect(file.reload).to be_deleted_in_s3
       expect(PendingEdit.first!.value).to eq("local-one")
-      expect(put_requests).to be_empty if operation == :head_object
+      expect(put_requests).to be_empty if operation == :get_object
       request_count = client.api_requests.size
       post publish_s3_file_path(file)
       expect(client.api_requests.size).to eq(request_count)
@@ -376,16 +377,17 @@ RSpec.describe "S3 conflicts", type: :request do
     post discard_s3_changes_path(file)
     expect(response).to redirect_to(s3_file_path(file))
     expect(PendingEdit.count + PendingChoice.count).to eq(0)
-    expect(file.reload.content).to include("remote-one")
+    expect(snapshot_entries(file).map(&:value)).to include("remote-one")
   end
 
-  it "encrypts bases and keeps them out of model inspection" do
+  it "encrypts secret bases and keeps them out of model inspection" do
+    %w[FIRST SAME].each { |name| EnvFileValueTypes.save(file, name: name, value_type: "secret") }
     edit
     choose
     expect(PendingEdit.first!.base_value).to eq("base-one")
     expect(PendingChoice.first!.base_values).to eq(%w[first last])
     { PendingEdit => "base_value", PendingChoice => "base_values" }.each do |model, column|
-      raw = model.connection.select_value("SELECT #{column} FROM #{model.table_name}")
+      raw = raw_rows(model.table_name).first.fetch(column)
       expect(JSON.parse(raw)).to have_key("p")
       expect(raw).not_to include("base-one", "first", "last")
       expect(model.first!.inspect).not_to include("base-one", '"first"', '"last"')

@@ -16,7 +16,6 @@ class EnvFilesController < ApplicationController
   def index
     @bucket = ENV["ENVS_S3_BUCKET"].presence
     @env_files = EnvFile.where(bucket: @bucket).includes(:pending_edits, :pending_choices).order(:key)
-    ActiveRecord::Encryption.config.primary_key if @env_files.exists?
   end
 
   def show
@@ -78,19 +77,18 @@ class EnvFilesController < ApplicationController
   end
 
   def review
-    result = EnvFileRewrite.rewrite(@env_file)
+    result, = @env_file.with_lock { EnvFileReview.call(@env_file) }
+    return changed_file(result) if result.is_a?(Symbol)
+
     @rows = EnvFileDiff.call(result.operations)
   end
 
   def publish
     result = EnvFilePublish.call(@env_file)
-    case result
-    when :changed
-      redirect_to s3_file_path(@env_file), alert: "The file changed in S3. Check the changes again."
-    when :deleted
-      redirect_to s3_file_path(@env_file), alert: "This file is no longer in S3."
-    else
+    if result == :published
       redirect_to s3_file_path(@env_file), notice: "Published the env file to S3."
+    else
+      changed_file(result)
     end
   end
 
@@ -106,8 +104,12 @@ class EnvFilesController < ApplicationController
 
   private
 
+  def changed_file(result)
+    message = result == :deleted ? "This file is no longer in S3." : "The file changed in S3. Check your changes."
+    redirect_to s3_file_path(@env_file), alert: message
+  end
+
   def load_file
-    ActiveRecord::Encryption.config.primary_key
     @env_file = EnvFile.where(bucket: ENV["ENVS_S3_BUCKET"].presence).find(params[:id])
   end
 
@@ -173,7 +175,7 @@ class EnvFilesController < ApplicationController
   end
 
   def missing_encryption_key
-    message = "Set ENVS_ENCRYPTION_KEY to read and save snapshots."
+    message = "Set ENVS_ENCRYPTION_KEY to read and save secret values."
     if action_name == "index"
       @encryption_missing = true
       flash.now[:alert] = message

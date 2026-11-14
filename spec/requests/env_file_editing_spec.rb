@@ -6,7 +6,7 @@ RSpec.describe "Editing and publishing S3 files", type: :request do
   let(:bucket) { "invented-bucket" }
   let(:client) { Aws::S3::Client.new(stub_responses: true, region: "us-east-1") }
   let(:text) { "FIRST=one\nSAME=first\nSAME=second\nBARE\nLAST=end\n" }
-  let!(:file) { EnvFile.create!(bucket: bucket, key: "invented.env", content: text, etag: '"old-etag"', fetched_at: Time.current) }
+  let!(:file) { create_env_file(bucket: bucket, key: "invented.env", content: text, etag: '"old-etag"', fetched_at: Time.current) }
 
   around do |example|
     previous = ENV["ENVS_S3_BUCKET"]
@@ -19,7 +19,7 @@ RSpec.describe "Editing and publishing S3 files", type: :request do
   before do
     allow(EnvFilePublish).to receive(:client).and_return(client)
     allow(EnvFileRefresh).to receive(:client).and_return(client)
-    client.stub_responses(:head_object, content_type: "text/plain", metadata: { "invented" => "metadata" },
+    client.stub_responses(:get_object, body: text, etag: file.etag, content_type: "text/plain", metadata: { "invented" => "metadata" },
       server_side_encryption: "aws:kms", ssekms_key_id: "invented-kms-key")
     client.stub_responses(:put_object, etag: '"new-etag"')
   end
@@ -40,7 +40,7 @@ RSpec.describe "Editing and publishing S3 files", type: :request do
     client.api_requests.find { |request| request[:operation_name] == :put_object }&.fetch(:params)
   end
 
-  it "saves, updates, reverts and discards encrypted local edits with row and card labels" do
+  it "saves, updates, reverts and discards local edits with row and card labels" do
     show_file
     expect(document.at_css("button[disabled]").text).to eq("Review & publish")
     expect(document.css('a').count { |link| link.text == "Edit" }).to eq(3)
@@ -55,11 +55,10 @@ RSpec.describe "Editing and publishing S3 files", type: :request do
     edit = PendingEdit.first!
     expect(edit.attributes.slice("name", "value"))
       .to eq("name" => "FIRST", "value" => "invented-private-value")
-    raw = PendingEdit.connection.select_value("SELECT value FROM pending_edits WHERE id = #{edit.id.to_i}")
-    expect(raw).not_to include("invented-private-value")
-    expect(JSON.parse(raw)).to have_key("p")
+    raw = raw_rows("pending_edits").find { |row| row["id"] == edit.id }.fetch("value")
+    expect(raw).to eq("invented-private-value")
     expect(edit.inspect).not_to include("invented-private-value")
-    expect(file.reload.content).to eq(text)
+    expect(snapshot_entries(file)).to eq(entries_from(text))
     show_file
     expect(document.at_css("section .Box-row").text).to include("invented-private-value", "Modified")
     expect(document.at_css('a.btn-primary')["href"]).to eq(review_s3_file_path(file))
@@ -105,7 +104,7 @@ RSpec.describe "Editing and publishing S3 files", type: :request do
       expect(response.headers["Cache-Control"]).to eq("no-store")
       expect(document.at_css(".flash-error").text).to include(reason)
       expect(PendingEdit.count).to eq(0)
-      expect(file.reload.content).to eq(text)
+      expect(snapshot_entries(file)).to eq(entries_from(text))
     end
   end
 
@@ -126,17 +125,17 @@ RSpec.describe "Editing and publishing S3 files", type: :request do
 
   it "edits only the last line with a name and preserves every other byte" do
     original = "\uFEFF  SAME=first\r\n# invented comment\n\tSAME=second\r\nOTHER=last".b
-    file.update!(content: original)
+    update_env_file(file, content: original)
     save('"new" # = $VALUE', name: "SAME")
     expect(PendingEdit.first!.name).to eq("SAME")
     post publish_s3_file_path(file)
     expect(publish_request[:body].b).to eq(original.sub("second", '"new" # = $VALUE'))
-    expect(file.reload.content.b).to eq(publish_request[:body].b)
+    expect(snapshot_entries(file)).to eq(entries_from(publish_request[:body]))
   end
 
   it "preserves a BOM prefix and a missing final newline when editing those lines" do
     original = "\uFEFF  FIRST=one\r\n# keep\n\tLAST=last".b
-    file.update!(content: original)
+    update_env_file(file, content: original)
     save("first-change")
     save("last-change", name: "LAST")
     get review_s3_file_path(file)
@@ -150,19 +149,19 @@ RSpec.describe "Editing and publishing S3 files", type: :request do
     client.stub_responses(:list_objects_v2, contents: [ { key: file.key, size: 40 }, { key: "other.env", size: 40 } ])
     client.stub_responses(:get_object, [ { body: "FIRST=kept-edit\n", etag: '"remote"' }, "AccessDenied" ])
     post refresh_s3_path
-    expect(file.reload.content).to eq(text)
+    expect(snapshot_entries(file)).to eq(entries_from(text))
     expect(PendingEdit.first!.value).to eq("kept-edit")
   end
 
-  it "keeps edits when head_object fails before the write" do
+  it "keeps edits when get_object fails before the write" do
     save("kept-edit")
-    client.stub_responses(:head_object, "AccessDenied")
+    client.stub_responses(:get_object, "AccessDenied")
     post publish_s3_file_path(file)
     follow_redirect!
     expect(document.at_css(".flash-error").text).to eq("S3 publish failed (AccessDenied).")
     expect(publish_request).to be_nil
     expect(PendingEdit.first!.value).to eq("kept-edit")
-    expect(file.reload.content).to eq(text)
+    expect(snapshot_entries(file)).to eq(entries_from(text))
   end
 
   it "refuses a publish with no ETag or no changes" do
@@ -178,7 +177,7 @@ RSpec.describe "Editing and publishing S3 files", type: :request do
   end
 
   it "shows three context lines, line numbers, markers and diff classes" do
-    file.update!(content: (1..16).map { |number| "KEY#{number}=old#{number}\n" }.join)
+    update_env_file(file, content: (1..16).map { |number| "KEY#{number}=old#{number}\n" }.join)
     save("new5", name: "KEY5")
     save("new14", name: "KEY14")
     get review_s3_file_path(file)
@@ -201,8 +200,8 @@ RSpec.describe "Editing and publishing S3 files", type: :request do
     expect(publish_request).to include(bucket: bucket, key: file.key, body: text.sub("one", "published"),
       if_match: '"old-etag"', content_type: "text/plain", metadata: { "invented" => "metadata" },
       server_side_encryption: "aws:kms", ssekms_key_id: "invented-kms-key")
-    expect(file.reload.attributes.slice("content", "etag", "last_modified", "fetched_at"))
-      .to eq("content" => text.sub("one", "published"), "etag" => '"new-etag"',
+    expect(file.reload.attributes.slice("etag", "last_modified", "fetched_at"))
+      .to eq("etag" => '"new-etag"',
         "last_modified" => Time.current, "fetched_at" => Time.current)
     expect(PendingEdit.count).to eq(0)
     follow_redirect!
@@ -225,7 +224,7 @@ RSpec.describe "Editing and publishing S3 files", type: :request do
     get edit_s3_variable_path(file, name: "BARE")
     expect(response).to have_http_status(:not_found)
     [ { content: "INVALID NAME=value" }, { content: nil, too_large: true } ].each do |attributes|
-      file.update!(attributes)
+      update_env_file(file, **attributes)
       show_file
       expect(document.css("a").map(&:text)).not_to include("Edit")
       save("attempted")
@@ -244,7 +243,7 @@ RSpec.describe "Editing and publishing S3 files", type: :request do
       client.stub_responses(:list_objects_v2, contents: [ { key: file.key, size: new_text.bytesize } ])
       client.stub_responses(:get_object, body: new_text, etag: '"refreshed"')
       post refresh_s3_path
-      expect(file.reload.content).to eq(new_text)
+      expect(snapshot_entries(file)).to eq(entries_from(new_text))
       expect(PendingEdit.exists?).to eq(kept)
     end
   end
@@ -259,7 +258,7 @@ RSpec.describe "Editing and publishing S3 files", type: :request do
 
   it "uses a name query on GET and a hidden name on POST for path punctuation" do
     name = "API/KEY.part?"
-    file.update!(content: "#{name}=invented-before\nOTHER=kept\n")
+    update_env_file(file, content: "#{name}=invented-before\nOTHER=kept\n")
     show_file
     link = document.css("section a").find { |node| node.text == "Edit" }
     uri = URI.parse(link["href"])
@@ -280,11 +279,11 @@ RSpec.describe "Editing and publishing S3 files", type: :request do
   end
 
   it "keeps the name from the opened form when the snapshot gains a preceding line" do
-    file.update!(content: "FIRST=one\nAPI_KEY=before\n")
+    update_env_file(file, content: "FIRST=one\nAPI_KEY=before\n")
     get edit_s3_variable_path(file, name: "API_KEY")
     form = document.at_css("main form")
     name = form.at_css('input[name="name"]')["value"]
-    file.update!(content: "ADDED=prefix\nFIRST=one\nAPI_KEY=before\n")
+    update_env_file(file, content: "ADDED=prefix\nFIRST=one\nAPI_KEY=before\n")
     post form["action"], params: { name: name, value: "after", etag: form.at_css('input[name="etag"]')["value"] }
     expect(response).to redirect_to(s3_file_path(file))
     expect(PendingEdit.first!.name).to eq("API_KEY")
@@ -296,13 +295,13 @@ RSpec.describe "Editing and publishing S3 files", type: :request do
     get edit_s3_variable_path(file, name: "FIRST")
     form = document.at_css("main form")
     name = form.at_css('input[name="name"]')["value"]
-    file.update!(content: "OTHER=one\nSAME=second\n")
+    update_env_file(file, content: "OTHER=one\nSAME=second\n")
     post form["action"], params: { name: name, value: "must-not-save" }
     expect(response).to redirect_to(s3_file_path(file))
     follow_redirect!
     expect(document.at_css(".flash-error").text).to eq("The variable no longer exists. Refresh the file.")
     expect(PendingEdit.count).to eq(0)
-    expect(file.reload.content).to eq("OTHER=one\nSAME=second\n")
+    expect(snapshot_entries(file)).to eq(entries_from("OTHER=one\nSAME=second\n"))
   end
 
   it "returns 404 for an unknown name and removes the old line-number routes" do

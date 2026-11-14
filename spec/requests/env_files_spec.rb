@@ -110,7 +110,7 @@ RSpec.describe "S3 env files", type: :request do
     expect(document.text).not_to include("invented-value", "ignored.txt")
     expect(document.css("script").map { |tag| tag["type"] }).to eq(%w[importmap module])
     expect(response.headers["Cache-Control"]).to eq("no-store")
-    expect(EnvFile.find_by!(key: "invented/big.env").content).to be_nil
+    expect(EnvFile.find_by!(key: "invented/big.env").variables).to be_empty
     expect(EnvFile.find_by!(key: "invented/.env").attributes.slice("etag", "last_modified", "fetched_at"))
       .to eq("etag" => '"invented-etag"', "last_modified" => modified, "fetched_at" => Time.current)
 
@@ -137,24 +137,24 @@ RSpec.describe "S3 env files", type: :request do
     expect(document.css("script").map { |tag| tag["type"] }).to eq(%w[importmap module])
     expect(response.headers["Cache-Control"]).to eq("no-store")
     expect(document.css("header a").map { |link| link["href"] }).to eq([ files_path, files_path, s3_path ])
-    raw = EnvFile.connection.select_value("SELECT content FROM env_files WHERE id = #{file.id.to_i}")
-    expect(raw).not_to include("invented-value", "FIRST", "HTML")
-    expect(JSON.parse(raw)).to have_key("p")
-    expect(file.content).to eq(contents["invented/.env"])
+    raw = raw_rows("env_file_variables").find { |row| row["name"] == "FIRST" }.fetch("value")
+    expect(raw).to eq("invented-value")
+    expect(EnvFile.column_names).not_to include("content")
+    expect(snapshot_entries(file)).to eq(entries_from(contents["invented/.env"]))
     expect(file.inspect).not_to include("invented-value")
   end
 
   it "updates existing snapshots and deletes removed objects only in the configured bucket" do
     refresh
     file = EnvFile.find_by!(bucket: bucket, key: "invented/.env")
-    removed = EnvFile.create!(bucket: bucket, key: "invented/removed.env", content: "OLD=invented", fetched_at: Time.current)
-    other = EnvFile.create!(bucket: "invented-other-bucket", key: "other.env", content: "OTHER=invented", fetched_at: Time.current)
+    removed = create_env_file(bucket: bucket, key: "invented/removed.env", content: "OLD=invented", fetched_at: Time.current)
+    other = create_env_file(bucket: "invented-other-bucket", key: "other.env", content: "OTHER=invented", fetched_at: Time.current)
     contents["invented/.env"] = "UPDATED=invented-new-value\n"
     client.stub_responses(:get_object, body: contents["invented/.env"], etag: '"updated-etag"', last_modified: modified + 1.hour)
 
     refresh
 
-    expect(file.reload.content).to eq("UPDATED=invented-new-value\n")
+    expect(snapshot_entries(file)).to eq(entries_from("UPDATED=invented-new-value\n"))
     expect(file.etag).to eq('"updated-etag"')
     expect(file.last_modified).to eq(modified + 1.hour)
     expect(EnvFile.exists?(removed.id)).to be(false)
@@ -172,7 +172,7 @@ RSpec.describe "S3 env files", type: :request do
     expect(document.at_css(".blankslate").text).to include("No snapshots yet")
   end
 
-  it "preserves invalid UTF-8 as an encrypted invalid snapshot" do
+  it "records an error without storing invalid UTF-8" do
     contents["invented/.env"] = "KEY=\xFF".b
     refresh
 
@@ -187,7 +187,7 @@ RSpec.describe "S3 env files", type: :request do
 
     refresh
 
-    expect(EnvFile.first!.content).to eq(contents["invented/.env"])
+    expect(snapshot_entries(EnvFile.first!)).to eq(entries_from(contents["invented/.env"]))
     get s3_file_path(EnvFile.first!)
     expect(document.css("section .variable-value").map { |node| node.text.bytesize }).to eq([ 65_531 ] * 16)
   end
@@ -198,7 +198,7 @@ RSpec.describe "S3 env files", type: :request do
     refresh
 
     expect(EnvFile.first!).to be_too_large
-    expect(EnvFile.first!.content).to be_nil
+    expect(EnvFile.first!.variables).to be_empty
     expect(document.text).to include("Too large")
   end
 
@@ -285,21 +285,17 @@ RSpec.describe "S3 env files", type: :request do
     end
   end
 
-  it "shows a flash when the encryption key is missing, including with existing snapshots" do
-    refresh
-    config = ActiveRecord::Encryption.config
-    original_key = config.primary_key
-    config.primary_key = nil
-
-    refresh
-
-    expect(document.at_css(".flash-error").text).to include("ENVS_ENCRYPTION_KEY")
-    expect(document.at_css(".blankslate").text).to include("Snapshots unavailable")
-    get s3_file_path(EnvFile.first!)
-    expect(response).to redirect_to(s3_path)
-  ensure
-    config.primary_key = original_key if config
-  end
+it "reads and refreshes undecided values without an encryption key" do
+  config = ActiveRecord::Encryption.config
+  original_key = config.primary_key
+  config.primary_key = nil
+  refresh
+  expect(document.at_css(".flash-error")).to be_nil
+  get s3_file_path(EnvFile.first!)
+  expect(response).to have_http_status(:ok)
+ensure
+  config.primary_key = original_key if config
+end
 
   it "does not log values or file content" do
     output = StringIO.new

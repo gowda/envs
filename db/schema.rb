@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_11_14_000006) do
+ActiveRecord::Schema[8.1].define(version: 2026_11_15_000000) do
   create_table "active_storage_attachments", force: :cascade do |t|
     t.string "name", null: false
     t.string "record_type", null: false
@@ -39,15 +39,28 @@ ActiveRecord::Schema[8.1].define(version: 2026_11_14_000006) do
     t.index [ "blob_id", "variation_digest" ], name: "index_active_storage_variant_records_uniqueness", unique: true
   end
 
+  create_table "env_file_variables", force: :cascade do |t|
+    t.integer "env_file_id", null: false
+    t.integer "position", null: false
+    t.integer "line_number", null: false
+    t.string "name", null: false
+    t.text "value", null: false
+    t.string "value_type"
+    t.index [ "env_file_id", "name" ], name: "index_env_file_variables_on_env_file_id_and_name"
+    t.index [ "env_file_id", "position" ], name: "index_env_file_variables_on_env_file_id_and_position", unique: true
+    t.index [ "env_file_id" ], name: "index_env_file_variables_on_env_file_id"
+  end
+
   create_table "env_files", force: :cascade do |t|
     t.string "bucket", null: false
     t.string "key", null: false
     t.string "etag"
     t.datetime "last_modified"
     t.datetime "fetched_at", null: false
-    t.text "content"
     t.boolean "too_large", default: false, null: false
     t.boolean "deleted_in_s3", default: false, null: false
+    t.text "parse_error"
+    t.text "unassigned_lines"
     t.index [ "bucket", "key" ], name: "index_env_files_on_bucket_and_key", unique: true
   end
 
@@ -59,6 +72,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_11_14_000006) do
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
     t.text "base_values"
+    t.string "value_type"
     t.index [ "env_file_id", "name" ], name: "index_pending_choices_on_env_file_id_and_name", unique: true
     t.index [ "env_file_id" ], name: "index_pending_choices_on_env_file_id"
   end
@@ -70,6 +84,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_11_14_000006) do
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
     t.text "base_value"
+    t.string "value_type"
     t.index [ "env_file_id", "name" ], name: "index_pending_edits_on_env_file_id_and_name", unique: true
     t.index [ "env_file_id" ], name: "index_pending_edits_on_env_file_id"
   end
@@ -81,17 +96,9 @@ ActiveRecord::Schema[8.1].define(version: 2026_11_14_000006) do
     t.index [ "public_id" ], name: "index_uploads_on_public_id", unique: true
   end
 
-  create_table "variable_types", force: :cascade do |t|
-    t.string "bucket", null: false
-    t.string "key", null: false
-    t.string "name", null: false
-    t.string "value_type", null: false
-    t.index [ "bucket", "key", "name" ], name: "index_variable_types_on_bucket_and_key_and_name", unique: true
-    t.check_constraint "value_type IN ('secret', 'plain')", name: "variable_types_value_type"
-  end
-
   add_foreign_key "active_storage_attachments", "active_storage_blobs", column: "blob_id"
   add_foreign_key "active_storage_variant_records", "active_storage_blobs", column: "blob_id"
+  add_foreign_key "env_file_variables", "env_files", on_delete: :cascade
   add_foreign_key "pending_choices", "env_files", on_delete: :cascade
   add_foreign_key "pending_edits", "env_files", on_delete: :cascade
 end

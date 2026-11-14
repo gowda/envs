@@ -5,7 +5,7 @@ RSpec.describe "S3 variable types", type: :request do
 
   let(:bucket) { "invented-bucket" }
   let(:text) { "POSTGRES_PASSWORD=invented-first\nPOSTGRES_PASSWORD=invented-last\napi-key=invented-key\nTZ=UTC\n" }
-  let!(:file) { EnvFile.create!(bucket: bucket, key: "invented.env", content: text, etag: '"old"', fetched_at: Time.current) }
+  let!(:file) { create_env_file(bucket: bucket, key: "invented.env", content: text, etag: '"old"', fetched_at: Time.current) }
   let(:client) { Aws::S3::Client.new(stub_responses: true, region: "us-east-1") }
 
   around do |example|
@@ -47,7 +47,7 @@ RSpec.describe "S3 variable types", type: :request do
   end
 
   it "suggests each undecided qualifying name once, without deciding or inspecting values" do
-    file.update!(content: text + "Db.Token=x\nSECRET=y\nKEYBOARD=secret\nPASSPORT=password\nMONKEY=token\n")
+    update_env_file(file, content: text + "Db.Token=x\nSECRET=y\nKEYBOARD=secret\nPASSPORT=password\nMONKEY=token\n")
     get s3_file_path(file)
     expect(suggestions.map { |row| row.at_css("p").text }).to eq([
       "POSTGRES_PASSWORD looks like a secret.", "api-key looks like a secret.",
@@ -55,8 +55,8 @@ RSpec.describe "S3 variable types", type: :request do
     ])
     expect(suggestions.map { |row| row.css("button").map(&:text) }).to all(eq([ "Mark as secret", "Dismiss" ]))
     expect(document.css("section").map { |section| section["aria-label"] }).to eq([ "Suggestions", "Variables" ])
-    expect(VariableType.count).to eq(0)
-    file.update!(content: "KEYBOARD=secret\nPASSPORT=password\nMONKEY=token\nTZ=PASSWORD\n")
+    expect(file.variables.where.not(value_type: nil).count).to eq(0)
+    update_env_file(file, content: "KEYBOARD=secret\nPASSPORT=password\nMONKEY=token\nTZ=PASSWORD\n")
     get s3_file_path(file)
     expect(document.at_css('[aria-label="Suggestions"]')).to be_nil
   end
@@ -64,9 +64,9 @@ RSpec.describe "S3 variable types", type: :request do
   it "marks a repeated name immediately, labels every line and removes its suggestion" do
     mark
     expect(document.text).to include("Marked POSTGRES_PASSWORD as secret.")
-    row = VariableType.sole
-    expect(row.attributes.slice("bucket", "key", "name", "value_type")).to eq(
-      "bucket" => bucket, "key" => file.key, "name" => "POSTGRES_PASSWORD", "value_type" => "secret")
+    row = file.variables.where.not(value_type: nil).first!
+    expect(row.attributes.slice("env_file_id", "name", "value_type")).to eq(
+      "env_file_id" => file.id, "name" => "POSTGRES_PASSWORD", "value_type" => "secret")
     expect(rows.first(2).map { |entry| entry.css(".Label").map(&:text) }).to eq([ [ "Overridden", "Secret" ], [ "Secret" ] ])
     expect(rows.map { |entry| entry.at_css(".variable-value").text }).to eq([ "invented-first", "invented-last", "invented-key", "UTC" ])
     expect(suggestions.map(&:text).join).not_to include("POSTGRES_PASSWORD")
@@ -77,7 +77,7 @@ RSpec.describe "S3 variable types", type: :request do
 
   it "dismisses a suggestion as an explicit plain type" do
     mark(value_type: "plain", dismiss: true)
-    expect(VariableType.sole).to be_plain
+    expect(file.variables.where.not(value_type: nil).first!).to be_plain
     expect(document.text).to include("Dismissed the suggestion for POSTGRES_PASSWORD.")
     expect(rows.css(".Label").map(&:text)).not_to include("Secret")
     expect(suggestions.map(&:text).join).not_to include("POSTGRES_PASSWORD")
@@ -97,13 +97,13 @@ RSpec.describe "S3 variable types", type: :request do
     expect(document.css("button").map(&:text)).not_to include("Mark as secret")
     mark("TZ", value_type: "plain")
     expect(document.text).to include("Marked TZ as plain.")
-    expect(VariableType.sole).to be_plain
+    expect(file.variables.where.not(value_type: nil).first!).to be_plain
   end
 
   [ 80, 6_000 ].each do |length|
     it "keeps a #{length}-character name intact and bounds all three type messages" do
       name = "PASSWORD_" + "x" * (length - 9)
-      file.update!(content: "#{name}=invented-value\n")
+      update_env_file(file, content: "#{name}=invented-value\n")
       get s3_file_path(file)
       expect(suggestions.sole.at_css("p").text).to eq("#{name} looks like a secret.")
       expect(rows.sole.at_css(".text-bold").text).to eq(name)
@@ -118,8 +118,8 @@ RSpec.describe "S3 variable types", type: :request do
         [ "plain", false, "Marked #{shown_name} as plain." ]
       ].each do |value_type, dismiss, message|
         mark(name, value_type: value_type, dismiss: dismiss)
-        expect(VariableType.sole.name).to eq(name)
-        expect(VariableType.sole.value_type).to eq(value_type)
+        expect(file.variables.where.not(value_type: nil).first!.name).to eq(name)
+        expect(file.variables.where.not(value_type: nil).first!.value_type).to eq(value_type)
         expect(document.at_css(".flash-success").text).to eq(message)
         expect(rows.sole.at_css(".text-bold").text).to eq(name)
       end
@@ -139,7 +139,7 @@ RSpec.describe "S3 variable types", type: :request do
         form = document.css("form").find { |node| node["action"] == s3_value_types_path(file) }
         expect(form.at_css("button").text).to eq(value_type == "secret" ? "Mark as plain" : "Mark as secret")
         expect(form.at_css('input[name="value_type"]')["value"]).to eq(value_type == "secret" ? "plain" : "secret")
-        expect(VariableType.sole.value_type).to eq(value_type)
+        expect(file.variables.where.not(value_type: nil).first!.value_type).to eq(value_type)
         expect(PendingEdit.count).to eq(0)
       end
     end
@@ -147,7 +147,7 @@ RSpec.describe "S3 variable types", type: :request do
 
   it "refuses an unknown type, a missing name, an invalid snapshot and a deleted file without changing stored types" do
     mark
-    original = VariableType.sole.attributes
+    original = file.variables.where.not(value_type: nil).first!.attributes
     [
       [ { name: "POSTGRES_PASSWORD", value_type: "unknown" }, "Choose secret or plain." ],
       [ { name: "MISSING", value_type: "plain" }, "The variable no longer exists." ]
@@ -156,16 +156,16 @@ RSpec.describe "S3 variable types", type: :request do
       expect(response).to redirect_to(s3_file_path(file))
       follow_redirect!
       expect(document.at_css(".flash-error").text).to include(message)
-      expect(VariableType.sole.attributes).to eq(original)
+      expect(file.variables.where.not(value_type: nil).first!.attributes).to eq(original)
     end
-    file.update!(content: "INVALID")
+    update_env_file(file, content: "INVALID")
     mark(value_type: "plain")
     expect(document.at_css(".flash-error").text).not_to be_empty
-    expect(VariableType.sole.attributes).to eq(original)
-    file.update!(content: text, deleted_in_s3: true)
+    expect(file.variables.where.not(value_type: nil).first!.attributes).to eq(original)
+    update_env_file(file, content: text, deleted_in_s3: true)
     mark(value_type: "plain")
     expect(document.at_css(".flash-error").text).to include("no longer in S3")
-    expect(VariableType.sole.attributes).to eq(original)
+    expect(file.variables.where(name: "POSTGRES_PASSWORD").pluck(:value_type)).to eq(%w[secret secret])
   end
 
   it "keeps the review, choices and edits unchanged and retains types after discard and publish" do
@@ -173,58 +173,53 @@ RSpec.describe "S3 variable types", type: :request do
     post edit_s3_variable_path(file), params: { name: "POSTGRES_PASSWORD", value: "invented-edit", etag: file.etag }
     get review_s3_file_path(file)
     review = document.at_css("main .Box").to_html
-    edits = file.pending_edits.map(&:attributes)
-    choices = file.pending_choices.map(&:attributes)
+    edits = file.pending_edits.reload.map { |edit| [ edit.name, edit.value, edit.base_value ] }
+    choices = file.pending_choices.reload.map { |choice| [ choice.name, choice.base_values ] }
     get s3_file_path(file)
     modified_count = document.css(".Label").count { |label| label.text == "Modified" }
     mark
     expect(document.css(".Label").count { |label| label.text == "Modified" }).to eq(modified_count)
-    expect(file.pending_edits.reload.map(&:attributes)).to eq(edits)
-    expect(file.pending_choices.reload.map(&:attributes)).to eq(choices)
+    expect(file.pending_edits.reload.map { |edit| [ edit.name, edit.value, edit.base_value ] }).to eq(edits)
+    expect(file.pending_choices.reload.map { |choice| [ choice.name, choice.base_values ] }).to eq(choices)
     get review_s3_file_path(file)
     expect(document.at_css("main .Box").to_html).to eq(review)
     post discard_s3_changes_path(file)
     expect(file.reload).not_to be_pending_changes
-    expect(VariableType.sole).to be_secret
+    expect(file.variables.where.not(value_type: nil).first!).to be_secret
     post s3_variable_choice_path(file), params: { name: "POSTGRES_PASSWORD", line_number: 1, line_count: 2 }
     post edit_s3_variable_path(file), params: { name: "POSTGRES_PASSWORD", value: "invented-published", etag: file.etag }
     client.stub_responses(:head_object, content_type: "text/plain")
     client.stub_responses(:put_object, etag: '"published"')
     post publish_s3_file_path(file)
     expect(response).to redirect_to(s3_file_path(file))
-    expect(file.reload.content).to include("POSTGRES_PASSWORD=invented-published")
+    expect(snapshot_entries(file).map(&:value)).to include("invented-published")
     expect(file).not_to be_pending_changes
-    expect(VariableType.sole).to be_secret
+    expect(file.variables.where.not(value_type: nil).first!).to be_secret
   end
 
-  it "retains the type through refreshes, missing names and deletion and re-creation of the snapshot" do
-    mark
-    original = VariableType.sole.attributes
-    refresh(text.sub("invented-last", "invented-refreshed"))
-    get s3_file_path(file)
-    expect(rows.first(2).map(&:text)).to all(include("Secret"))
-    refresh("TZ=UTC\n")
-    get s3_file_path(file)
-    expect(rows.map(&:text).join).not_to include("Secret")
-    refresh(text)
-    get s3_file_path(file)
-    expect(rows.first(2).map(&:text)).to all(include("Secret"))
-    old_id = file.id
-    client.stub_responses(:list_objects_v2, contents: [])
-    post refresh_s3_path
-    expect(EnvFile.exists?(old_id)).to be(false)
-    expect(VariableType.sole.attributes).to eq(original)
-    refresh(text)
-    restored = EnvFile.find_by!(bucket: bucket, key: file.key)
-    expect(restored.id).not_to eq(old_id)
-    get s3_file_path(restored)
-    expect(rows.first(2).map(&:text)).to all(include("Secret"))
-    expect(suggestions.map(&:text).join).not_to include("POSTGRES_PASSWORD")
-  end
+it "keeps a type for a name that stays and forgets names that leave" do
+  mark
+  refresh(text.sub("invented-last", "invented-refreshed") + "POSTGRES_PASSWORD=invented-added\n")
+  expect(file.variables.where(name: "POSTGRES_PASSWORD").pluck(:value_type)).to eq(%w[secret secret secret])
+  refresh("TZ=UTC\n")
+  expect(file.variables.where(name: "POSTGRES_PASSWORD")).to be_empty
+  refresh(text)
+  get s3_file_path(file)
+  expect(rows.first(2).map(&:text).join).not_to include("Secret")
+  expect(suggestions.map(&:text).join).to include("POSTGRES_PASSWORD")
+  old_id = file.id
+  client.stub_responses(:list_objects_v2, contents: [])
+  post refresh_s3_path
+  expect(EnvFile.exists?(old_id)).to be(false)
+  refresh(text)
+  restored = EnvFile.find_by!(bucket: bucket, key: file.key)
+  expect(restored.id).not_to eq(old_id)
+  expect(restored.variables.pluck(:value_type)).to all(be_nil)
+end
 
   it "scopes the type to both bucket and key" do
     mark
-    other = EnvFile.create!(bucket: bucket, key: "other.env", content: text, fetched_at: Time.current)
+    other = create_env_file(bucket: bucket, key: "other.env", content: text, fetched_at: Time.current)
     get s3_file_path(other)
     expect(suggestions.map(&:text).join).to include("POSTGRES_PASSWORD")
     expect(rows.css(".Label").map(&:text)).not_to include("Secret")
@@ -237,7 +232,7 @@ RSpec.describe "S3 variable types", type: :request do
 
   it "shows no suggestions for invalid, oversized or deleted S3 files" do
     [ { content: "INVALID" }, { too_large: true }, { deleted_in_s3: true } ].each do |attributes|
-      file.update!({ content: text, too_large: false, deleted_in_s3: false }.merge(attributes))
+      update_env_file(file, **{ content: text, too_large: false, deleted_in_s3: false }.merge(attributes))
       get s3_file_path(file)
       expect(document.at_css('[aria-label="Suggestions"]')).to be_nil
       expect(response.headers["Cache-Control"]).to eq("no-store")

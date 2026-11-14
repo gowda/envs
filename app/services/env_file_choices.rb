@@ -21,6 +21,7 @@ class EnvFileChoices
 
       change(file, name) do
         choice = file.pending_choices.find_or_initialize_by(name: name)
+        choice.value_type = file.variables.find_by!(name: name).value_type
         choice.update!(keep_occurrence: occurrence + 1, line_count: entries.size, base_values: entries.map(&:value))
       end
     end
