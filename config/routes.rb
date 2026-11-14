@@ -7,6 +7,7 @@ Rails.application.routes.draw do
   get "files/:id", to: "uploads#show", as: :file
   get "s3", to: "env_files#index", as: :s3
   post "s3/refresh", to: "env_files#refresh", as: :refresh_s3
+  post "s3/:id/value_types", to: "env_files#update_value_type", as: :s3_value_types
   get "s3/:id/edits", to: "env_files#edit", as: :edit_s3_variable
   post "s3/:id/edits", to: "env_files#update_edit"
   delete "s3/:id/edits", to: "env_files#delete_edit"

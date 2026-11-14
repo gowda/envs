@@ -23,5 +23,6 @@
 <% if @result.error %>
   <div class="flash flash-error" role="alert"><%= @result.error %></div>
 <% else %>
-  <%= render "variables/list", result: @result, env_file: @env_file, edits: @edits, choices: @choices, conflicts: @conflicts %>
+  <%= render "suggestions", names: @value_types.suggestions, env_file: @env_file %>
+  <%= render "variables/list", result: @result, env_file: @env_file, edits: @edits, choices: @choices, conflicts: @conflicts, value_types: @value_types.types %>
 <% end %>

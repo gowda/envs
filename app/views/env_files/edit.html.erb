@@ -21,3 +21,6 @@
 <% if @edit %>
   <%= button_to "Use the S3 value", edit_s3_variable_path(@env_file), method: :delete, params: { name: @name }, class: "btn mt-3" %>
 <% end %>
+<p class="mt-3">Type: <%= @value_type %></p>
+<%= button_to @value_type == "secret" ? "Mark as plain" : "Mark as secret", s3_value_types_path(@env_file),
+  params: { name: @name, value_type: @value_type == "secret" ? "plain" : "secret" }, class: "btn" %>

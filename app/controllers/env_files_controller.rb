@@ -1,6 +1,6 @@
 class EnvFilesController < ApplicationController
   before_action :prevent_caching
-  before_action :load_file, only: %i[show edit update_edit delete_edit choice update_choice delete_choice discard review publish]
+  before_action :load_file, only: %i[show edit update_edit delete_edit choice update_choice delete_choice discard review publish update_value_type]
   param_encoding :update_edit, :value, Encoding::ASCII_8BIT
   rescue_from EnvFileRewrite::Invalid, with: :invalid_edit
   rescue_from EnvFileEditing::MissingVariable, with: :missing_variable
@@ -20,6 +20,7 @@ class EnvFilesController < ApplicationController
   end
 
   def show
+    @value_types = EnvFileValueTypes.new(@env_file)
     @result = @env_file.parsed_contents
     @edits = @env_file.pending_edits.index_by(&:name)
     conflicts = EnvFileConflicts.new(@env_file)
@@ -32,6 +33,12 @@ class EnvFilesController < ApplicationController
     @value = @edit ? @edit.value : @entry.value
   rescue EnvFileEditing::MissingVariable
     raise ActiveRecord::RecordNotFound, cause: nil
+  end
+
+  def update_value_type
+    input = params.permit(:name, :value_type, :dismiss)
+    message = EnvFileValueTypes.save(@env_file, name: input[:name], value_type: input[:value_type], dismiss: input[:dismiss] == "1")
+    redirect_to s3_file_path(@env_file), notice: message
   end
 
   def update_edit
@@ -107,6 +114,7 @@ class EnvFilesController < ApplicationController
   def load_entry
     @name = params.permit(:name).fetch(:name)
     @entry = EnvFileEditing.entry_for_name(@env_file, @name)
+    @value_type = EnvFileValueTypes.new(@env_file).types.fetch(@name, "plain")
     @edit = @env_file.pending_edits.find_by(name: @name)
     @conflicted = @edit && EnvFileConflicts.new(@env_file).edit_conflict?(@edit)
   end

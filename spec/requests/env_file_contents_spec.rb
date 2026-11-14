@@ -41,7 +41,7 @@ RSpec.describe "Container env file contents", type: :request do
         show_contents(values.each_with_index.map { |value, index| "KEY#{index}=#{value}\n" }.join)
 
         expect(response).to have_http_status(:ok)
-        rows = document.css("section .Box-row")
+        rows = document.css('[aria-label="Variables"] .Box-row')
         expect(rows.map { |row| row.at_css(".col-4").text }).to eq(values.each_index.map { |index| "KEY#{index}" })
         expect(rows.map { |row| row.at_css(".variable-value").text }).to eq(values)
         expect(rows.all? { |row| row.element_children.size == 2 }).to be(true)
@@ -51,7 +51,7 @@ RSpec.describe "Container env file contents", type: :request do
 
       it "labels whitespace on values for every source and allows no upload edits" do
         show_contents("FIRST= padded \nSECOND=\tvalue\t\nTHIRD=plain\n")
-        rows = document.css("section .Box-row")
+        rows = document.css('[aria-label="Variables"] .Box-row')
         expect(rows.map { |row| row.at_css(".variable-value").text }).to eq([ " padded ", "\tvalue\t", "plain" ])
         expect(rows.map { |row| row.css(".Label").map(&:text) })
           .to eq([ [ "Leading or trailing whitespace" ], [ "Leading or trailing whitespace" ], [] ])
@@ -75,7 +75,7 @@ RSpec.describe "Container env file contents", type: :request do
       it "keeps repeated names and labels overridden lines and counts entries on S3 cards" do
         show_contents("SAME=one\nOTHER=middle\nSAME=two\n")
 
-        rows = document.css("section .Box-row")
+        rows = document.css('[aria-label="Variables"] .Box-row')
         expect(rows.map { |row| row.at_css(".variable-value").text }).to eq(%w[one middle two])
         expect(rows.map { |row| row.css(".Label").map(&:text) }).to eq([ [ "Overridden" ], [], [] ])
         expect(document.at_css("section .Box-title .Label").text).to eq("3")
@@ -95,9 +95,9 @@ RSpec.describe "Container env file contents", type: :request do
         expect(warning.text).not_to include("private-")
         expect(document.css(".flash-warn").size).to eq(2)
         expect(document.at_css(".flash-warn").text).to include("Line 1 has no =")
-        expect(response.body.index('aria-label="Repeated names"')).to be < response.body.index('<section')
+        expect(response.body.index('aria-label="Repeated names"')).to be < response.body.index('aria-label="Variables"')
         expect(document.css(".Label").map(&:text)).not_to include("Duplicate")
-        rows = document.css("section .Box-row")
+        rows = document.css('[aria-label="Variables"] .Box-row')
         expect(rows.map { |row| row.css(".Label").map(&:text) }).to eq([
           [ "Overridden" ], [ "Overridden" ], [], [ "Overridden" ], []
         ])
@@ -122,7 +122,7 @@ RSpec.describe "Container env file contents", type: :request do
         expect(document.css("section .col-4").map(&:text)).to eq([ "KEY" ])
         warning = document.at_css(".flash-warn")
         expect(warning.text.strip).to eq("Lines 1, 3 have no =. A container gets no value from these lines.")
-        expect(response.body.index('class="flash flash-warn')).to be < response.body.index('<section')
+        expect(response.body.index('class="flash flash-warn')).to be < response.body.index('aria-label="Variables"')
       end
 
       it "uses the singular warning for one valid name without =" do
@@ -191,7 +191,7 @@ RSpec.describe "Container env file contents", type: :request do
         show_contents(("KEY=" + "a" * 65_531 + "\n") * 16)
 
         expect(response).to have_http_status(:ok)
-        expect(document.css("section .Box-row").size).to eq(16)
+        expect(document.css('[aria-label="Variables"] .Box-row').size).to eq(16)
       end
 
       it "rejects a file over 1 MB" do

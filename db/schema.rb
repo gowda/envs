@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_11_14_000005) do
+ActiveRecord::Schema[8.1].define(version: 2026_11_14_000006) do
   create_table "active_storage_attachments", force: :cascade do |t|
     t.string "name", null: false
     t.string "record_type", null: false
@@ -79,6 +79,15 @@ ActiveRecord::Schema[8.1].define(version: 2026_11_14_000005) do
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
     t.index [ "public_id" ], name: "index_uploads_on_public_id", unique: true
+  end
+
+  create_table "variable_types", force: :cascade do |t|
+    t.string "bucket", null: false
+    t.string "key", null: false
+    t.string "name", null: false
+    t.string "value_type", null: false
+    t.index [ "bucket", "key", "name" ], name: "index_variable_types_on_bucket_and_key_and_name", unique: true
+    t.check_constraint "value_type IN ('secret', 'plain')", name: "variable_types_value_type"
   end
 
   add_foreign_key "active_storage_attachments", "active_storage_blobs", column: "blob_id"
