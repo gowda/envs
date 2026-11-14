@@ -9,6 +9,7 @@ Rails.application.routes.draw do
   post "s3/refresh", to: "env_files#refresh", as: :refresh_s3
   get "s3/:id/edits", to: "env_files#edit", as: :edit_s3_variable
   post "s3/:id/edits", to: "env_files#update_edit"
+  delete "s3/:id/edits", to: "env_files#delete_edit"
   get "s3/:id/choices", to: "env_files#choice", as: :s3_variable_choice
   post "s3/:id/choices", to: "env_files#update_choice"
   delete "s3/:id/choices", to: "env_files#delete_choice"

@@ -2,6 +2,9 @@
 <div class="Subhead"><h1 class="Subhead-heading">Resolve repeated name</h1></div>
 <p class="text-mono variable-text"><%= @env_file.key %></p>
 <p>Choose the line to keep for <strong class="text-mono variable-text"><%= @name %></strong>. A publish removes the other lines with this name.</p>
+<% if @conflicted %>
+  <div class="flash flash-warn mb-3" role="alert">The lines changed in S3. Choose again.</div>
+<% end %>
 <%= form_with url: s3_variable_choice_path(@env_file), method: :post, local: true do |form| %>
   <%= form.hidden_field :name, value: @name %>
   <%= form.hidden_field :line_count, value: @entries.size %>

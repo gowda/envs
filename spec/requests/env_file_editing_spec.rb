@@ -29,7 +29,7 @@ RSpec.describe "Editing and publishing S3 files", type: :request do
   end
 
   def save(value, name: "FIRST")
-    post edit_s3_variable_path(file), params: { name: name, value: value }
+    post edit_s3_variable_path(file), params: { name: name, value: value, etag: file.reload.etag }
   end
 
   def show_file
@@ -110,7 +110,7 @@ RSpec.describe "Editing and publishing S3 files", type: :request do
   end
 
   it "rejects invalid UTF-8 on the edit page" do
-    post edit_s3_variable_path(file), params: "name=FIRST&value=%FF",
+    post edit_s3_variable_path(file), params: "name=FIRST&value=%FF&etag=%22old-etag%22",
       headers: { "CONTENT_TYPE" => "application/x-www-form-urlencoded" }
     expect(response).to have_http_status(:unprocessable_content)
     expect(document.at_css(".flash-error").text).to include("valid UTF-8")
@@ -209,20 +209,16 @@ RSpec.describe "Editing and publishing S3 files", type: :request do
     expect(document.at_css(".flash-success").text).to include("Published")
   end
 
-  %w[PreconditionFailed AccessDenied].each do |code|
-    it "keeps the snapshot and edits on #{code}" do
-      save("kept-edit")
-      snapshot = file.reload.attributes
-      edit = PendingEdit.first!.attributes
-      client.stub_responses(:put_object, code)
-      post publish_s3_file_path(file)
-      follow_redirect!
-      message = document.at_css(".flash-error").text
-      expect(message).to include(code == "PreconditionFailed" ? "file changed in S3" : "S3 publish failed (AccessDenied)")
-      expect(message).to include("Refresh") if code == "PreconditionFailed"
-      expect(file.reload.attributes).to eq(snapshot)
-      expect(PendingEdit.first!.attributes).to eq(edit)
-    end
+  it "keeps the snapshot and edits on AccessDenied" do
+    save("kept-edit")
+    snapshot = file.reload.attributes
+    edit = PendingEdit.first!.attributes
+    client.stub_responses(:put_object, "AccessDenied")
+    post publish_s3_file_path(file)
+    follow_redirect!
+    expect(document.at_css(".flash-error").text).to eq("S3 publish failed (AccessDenied).")
+    expect(file.reload.attributes).to eq(snapshot)
+    expect(PendingEdit.first!.attributes).to eq(edit)
   end
 
   it "does not permit editing invalid files, large files or bare names" do
@@ -240,7 +236,7 @@ RSpec.describe "Editing and publishing S3 files", type: :request do
 
   [ [ "FIRST=remote\nSAME=first\nSAME=second\n", true ],
     [ "FIRST=remote\nSAME=first\n", true ],
-    [ "FIRST=remote\nOTHER=last\n", false ],
+    [ "FIRST=remote\nOTHER=last\n", true ],
     [ "FIRST=remote\nSAME=kept-edit\nSAME=second\n", true ],
     [ "FIRST=remote\nSAME=first\nSAME=kept-edit\n", false ] ].each do |new_text, kept|
     it "reconciles a refreshed name: #{new_text.inspect}" do
@@ -253,12 +249,12 @@ RSpec.describe "Editing and publishing S3 files", type: :request do
     end
   end
 
-  it "deletes edits when the refreshed file is gone" do
+  it "keeps edits when the refreshed file is gone" do
     save("kept-edit")
     client.stub_responses(:list_objects_v2, contents: [])
     post refresh_s3_path
-    expect(EnvFile.exists?(file.id)).to be(false)
-    expect(PendingEdit.count).to eq(0)
+    expect(file.reload).to be_deleted_in_s3
+    expect(PendingEdit.count).to eq(1)
   end
 
   it "uses a name query on GET and a hidden name on POST for path punctuation" do
@@ -276,7 +272,7 @@ RSpec.describe "Editing and publishing S3 files", type: :request do
     expect(form["action"]).to eq(edit_s3_variable_path(file))
     expect(form.at_css('input[type="hidden"][name="name"]')["value"]).to eq(name)
     expect(form.at_css("label").text).to eq(name)
-    post form["action"], params: { name: name, value: "invented-after" }
+    post form["action"], params: { name: name, value: "invented-after", etag: form.at_css('input[name="etag"]')["value"] }
     expect(response).to redirect_to(s3_file_path(file))
     expect(PendingEdit.first!.name).to eq(name)
     post publish_s3_file_path(file)
@@ -289,7 +285,7 @@ RSpec.describe "Editing and publishing S3 files", type: :request do
     form = document.at_css("main form")
     name = form.at_css('input[name="name"]')["value"]
     file.update!(content: "ADDED=prefix\nFIRST=one\nAPI_KEY=before\n")
-    post form["action"], params: { name: name, value: "after" }
+    post form["action"], params: { name: name, value: "after", etag: form.at_css('input[name="etag"]')["value"] }
     expect(response).to redirect_to(s3_file_path(file))
     expect(PendingEdit.first!.name).to eq("API_KEY")
     post publish_s3_file_path(file)

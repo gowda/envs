@@ -2,7 +2,14 @@
 <div class="Subhead"><h1 class="Subhead-heading">Edit variable</h1></div>
 <p class="text-mono variable-text"><%= @env_file.key %></p>
 <% if @error %><div class="flash flash-error mb-3" role="alert"><%= @error %></div><% end %>
+<% if @conflicted %>
+  <div class="flash flash-warn mb-3" role="alert">
+    <p>Value when you edited: <span class="text-mono variable-text"><%= @edit.base_value %></span></p>
+    <p>Value in S3 now: <span class="text-mono variable-text"><%= @entry.value %></span></p>
+  </div>
+<% end %>
 <%= form_with url: edit_s3_variable_path(@env_file), method: :post, local: true do |form| %>
+  <%= form.hidden_field :etag, value: @env_file.etag %>
   <%= form.hidden_field :name, value: @name %>
   <div class="form-group">
     <div class="form-group-header"><%= form.label :value, @name, class: "text-mono variable-text" %></div>
@@ -10,4 +17,7 @@
   </div>
   <%= form.submit "Save", class: "btn btn-primary" %>
   <%= link_to "Cancel", s3_file_path(@env_file), class: "btn" %>
+<% end %>
+<% if @edit %>
+  <%= button_to "Use the S3 value", edit_s3_variable_path(@env_file), method: :delete, params: { name: @name }, class: "btn mt-3" %>
 <% end %>

@@ -1,5 +1,6 @@
 class EnvFileChoices
   def self.entries(file, name, line_count: nil)
+    EnvFileConflicts.ensure_present!(file)
     result = file.parsed_contents
     raise EnvFileRewrite::Invalid, result.error if result.error
 
@@ -15,20 +16,32 @@ class EnvFileChoices
   def self.save(file, name:, line_number:, line_count:)
     file.with_lock do
       entries = entries(file, name, line_count: line_count.to_s)
-
       occurrence = entries.index { |entry| entry.line_number.to_s == line_number.to_s }
       raise EnvFileRewrite::Invalid, "Select a line to keep." unless occurrence
 
-      choice = file.pending_choices.find_or_initialize_by(name: name)
-      choice.update!(keep_occurrence: occurrence + 1, line_count: entries.size)
-      EnvFileEditing.reconcile(file)
+      change(file, name) do
+        choice = file.pending_choices.find_or_initialize_by(name: name)
+        choice.update!(keep_occurrence: occurrence + 1, line_count: entries.size, base_values: entries.map(&:value))
+      end
     end
   end
 
   def self.delete(file, name:)
     file.with_lock do
-      file.pending_choices.where(name: name).delete_all
-      EnvFileEditing.reconcile(file)
+      EnvFileConflicts.ensure_present!(file)
+      change(file, name) { file.pending_choices.where(name: name).delete_all }
     end
   end
+
+  def self.change(file, name)
+    edit = file.pending_edits.find_by(name: name)
+    conflicted = edit && EnvFileConflicts.new(file).edit_conflict?(edit)
+    yield
+    file.pending_choices.reset
+    if edit && !conflicted && !file.parsed_contents.error
+      edit.update!(base_value: EnvFileRewrite.entries(file).fetch(name).value)
+    end
+    EnvFileEditing.reconcile(file)
+  end
+  private_class_method :change
 end

@@ -1,0 +1,20 @@
+<section class="Box mb-3" aria-label="Conflicts">
+  <div class="Box-header"><h2 class="Box-title">Conflicts</h2></div>
+  <% conflicts.each do |conflict| %>
+    <div class="Box-row variable-text">
+      <% if conflict.kind == :value_changed %>
+        <%= conflict.name %> changed in S3 after you edited it.
+        <%= link_to "Resolve", edit_s3_variable_path(env_file, name: conflict.name) %>
+      <% elsif conflict.kind == :name_gone %>
+        <%= conflict.name %> is no longer in the file in S3.
+        <%= button_to "Discard the change", edit_s3_variable_path(env_file), method: :delete, params: { name: conflict.name }, class: "btn" %>
+      <% elsif conflict.kind == :lines_changed %>
+        The lines with <%= conflict.name %> changed in S3.
+        <%= link_to "Resolve", s3_variable_choice_path(env_file, name: conflict.name) %>
+      <% elsif conflict.kind == :not_repeated %>
+        <%= conflict.name %> is no longer repeated in S3.
+        <%= button_to "Discard the choice", s3_variable_choice_path(env_file), method: :delete, params: { name: conflict.name }, class: "btn" %>
+      <% end %>
+    </div>
+  <% end %>
+</section>

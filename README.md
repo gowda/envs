@@ -56,7 +56,7 @@ Open `/files` and drop a UTF-8 env file of 1 MB or less, or choose **Select an e
 
 ### Work with S3
 
-Open `/s3` and select **Refresh from S3**. Open a file card, select **Edit** beside a variable, change its value and select **Save**. For a repeated name, select **Resolve** and choose the line to keep on publish. Select **Review & publish**, check the difference, then select **Publish**. See [S3](docs/s3.md) for refresh and publish details.
+Open `/s3` and select **Refresh from S3**. Open a file card, select **Edit** beside a variable, change its value and select **Save**. For a repeated name, select **Resolve** and choose the line to keep on publish. Select **Review & publish**, check the difference, then select **Publish**. See [S3](docs/s3.md) for refresh, conflict and publish details.
 
 ## Configuration
 

@@ -14,7 +14,7 @@
     <% repeated_names.each do |name, entries| %>
       <% choice = local_assigns.fetch(:choices, {})[name] %>
       <% kept = choice&.kept_entry(entries) %>
-      <p class="mb-0 variable-text"><%= name %> is on lines <%= entries.map(&:line_number).to_sentence(last_word_connector: " and ") %>. <% if choice %>Line <%= kept.line_number %> stays. A publish removes lines <%= entries.reject { |entry| entry == kept }.map(&:line_number).to_sentence(last_word_connector: " and ") %>.<% else %>Only line <%= entries.last.line_number %> takes effect.<% end %><% if local_assigns[:env_file] %> <%= link_to choice ? "Change" : "Resolve", s3_variable_choice_path(env_file, name: name) %><% end %></p>
+      <p class="mb-0 variable-text"><%= name %> is on lines <%= entries.map(&:line_number).to_sentence(last_word_connector: " and ") %>. <% if choice %>Line <%= kept.line_number %> stays. A publish removes lines <%= entries.reject { |entry| entry == kept }.map(&:line_number).to_sentence(last_word_connector: " and ") %>.<% else %>Only line <%= entries.last.line_number %> takes effect.<% end %><% if local_assigns[:env_file] && !env_file.deleted_in_s3? %> <%= link_to choice ? "Change" : "Resolve", s3_variable_choice_path(env_file, name: name) %><% end %></p>
     <% end %>
   </div>
 <% end %>
@@ -30,9 +30,10 @@
       <div class="col-4 pr-3"><span class="text-mono text-bold variable-text"><%= entry.name %></span><% unless effective %> <span class="Label"><%= choice ? "Removed" : "Overridden" %></span><% end %></div>
       <div class="col-8">
         <span class="text-mono variable-text variable-value"><%= value %></span>
+        <% if local_assigns.fetch(:conflicts, []).any? { |conflict| conflict.name == entry.name } %><span class="Label Label--danger">Conflict</span><% end %>
         <% if edit %><span class="Label Label--accent">Modified</span><% end %>
         <% if value.match?(/\A[ \t]|[ \t]\z/) %><span class="Label">Leading or trailing whitespace</span><% end %>
-        <% if local_assigns[:env_file] && effective %>
+        <% if local_assigns[:env_file] && !env_file.deleted_in_s3? && effective %>
           <%= link_to "Edit", edit_s3_variable_path(env_file, name: entry.name), class: "ml-2" %>
         <% end %>
       </div>
