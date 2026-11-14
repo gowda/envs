@@ -8,6 +8,23 @@ class EnvFileRefresh
     new(client, bucket, prefix).call
   end
 
+  def self.one(file, client:)
+    file.with_lock do
+      response = client.get_object(bucket: file.bucket, key: file.key)
+      apply(file, response)
+    end
+  rescue Aws::S3::Errors::NoSuchKey, Aws::S3::Errors::NotFound
+    file.update!(deleted_in_s3: true)
+  end
+
+  def self.apply(file, response)
+    content = response.body.read(EnvFileContents::MAX_BYTES + 1).to_s
+    too_large = content.bytesize > EnvFileContents::MAX_BYTES
+    file.update!(content: too_large ? nil : content, too_large: too_large, deleted_in_s3: false,
+      etag: response.etag, last_modified: response.last_modified, fetched_at: Time.current)
+    EnvFileEditing.reconcile(file)
+  end
+
   def initialize(client, bucket, prefix)
     @client = client
     @bucket = bucket
@@ -25,7 +42,9 @@ class EnvFileRefresh
           save_snapshot(object)
         end
       end
-      EnvFile.where(bucket: @bucket).where.not(key: keys).delete_all
+      EnvFile.where(bucket: @bucket).where.not(key: keys).find_each do |file|
+        file.pending_changes? ? file.update!(deleted_in_s3: true) : file.destroy!
+      end
     end
     keys.size
   end
@@ -38,18 +57,13 @@ class EnvFileRefresh
   end
 
   def save_snapshot(object)
-    attributes = { etag: object.etag, last_modified: object.last_modified, fetched_at: Time.current }
+    file = EnvFile.find_or_initialize_by(bucket: @bucket, key: object.key)
     if object.size > EnvFileContents::MAX_BYTES
-      attributes.merge!(content: nil, too_large: true)
+      file.update!(content: nil, too_large: true, deleted_in_s3: false,
+        etag: object.etag, last_modified: object.last_modified, fetched_at: Time.current)
     else
       response = @client.get_object(bucket: @bucket, key: object.key)
-      content = response.body.read(EnvFileContents::MAX_BYTES + 1).to_s
-      too_large = content.bytesize > EnvFileContents::MAX_BYTES
-      attributes.merge!(content: too_large ? nil : content, too_large: too_large,
-        etag: response.etag, last_modified: response.last_modified)
+      self.class.apply(file, response)
     end
-    file = EnvFile.find_or_initialize_by(bucket: @bucket, key: object.key)
-    file.update!(attributes)
-    EnvFileEditing.reconcile(file)
   end
 end

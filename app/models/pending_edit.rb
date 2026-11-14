@@ -1,6 +1,6 @@
 class PendingEdit < ApplicationRecord
   belongs_to :env_file
-  encrypts :value
+  encrypts :value, :base_value
 
   validates :name, presence: true, uniqueness: { scope: :env_file_id }
   validate :single_utf8_line

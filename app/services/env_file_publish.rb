@@ -4,7 +4,9 @@ class EnvFilePublish
   end
 
   def self.call(file)
+    client = nil
     file.with_lock do
+      EnvFileConflicts.ensure_publishable!(file)
       raise EnvFileRewrite::Invalid, "There are no changes to publish." unless file.pending_changes?
 
       raise EnvFileRewrite::Invalid, "Refresh the file to obtain its ETag before publishing." if file.etag.blank?
@@ -22,5 +24,12 @@ class EnvFilePublish
       file.pending_edits.delete_all
       file.pending_choices.delete_all
     end
+    :published
+  rescue Aws::S3::Errors::PreconditionFailed
+    EnvFileRefresh.one(file, client: client)
+    file.deleted_in_s3? ? :deleted : :changed
+  rescue Aws::S3::Errors::NoSuchKey, Aws::S3::Errors::NotFound
+    file.update!(deleted_in_s3: true)
+    :deleted
   end
 end

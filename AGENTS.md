@@ -37,13 +37,16 @@ The app supports local edits to S3 snapshots and publishes the changes to S3.
 - `/s3/<id>/edits?name=<name>` is the edit page of one variable.
 - `/s3/<id>/review` shows the difference before a publish.
 - `/s3/<id>/choices?name=<name>` shows the lines for a repeated name.
-- `PendingEdit` holds a local value edit.
-- `PendingChoice` holds the occurrence to keep and the count when chosen.
+- `DELETE /s3/<id>/edits` discards one value edit. The form sends the name as a parameter.
+- `PendingEdit` holds a local value edit and its encrypted base.
+- `PendingChoice` holds the occurrence to keep, the count and the encrypted base values.
 - `EnvFileChoices` saves or deletes a choice.
 - `EnvFileEditing` saves, discards and reconciles pending changes.
 - `EnvFileDiff` builds review rows from the rewrite operations.
 - `EnvFileRewrite` applies the changes to the snapshot text.
 - `EnvFilePublish` writes the file to S3.
+- `EnvFileConflicts` computes conflicts from the snapshot and the bases.
+- `EnvFileRefresh` updates snapshots and records objects that are gone from S3.
 
 ## Product rules
 
@@ -65,6 +68,14 @@ The app supports local edits to S3 snapshots and publishes the changes to S3.
 - A choice for a repeated name removes the other lines with that name on publish.
 - Nothing adds a line.
 - A rewrite changes no other text and preserves the byte order mark at the start.
+- A refresh does not delete a pending change, except an edit whose line already holds its value.
+- A pending change stores its encrypted base from the snapshot when the user saves.
+- A pending change is in conflict if the snapshot differs from its base.
+- If the snapshot is invalid or too large, keep every pending change and compute no conflict.
+- If a choice is in conflict, the last line takes effect.
+- A file that is gone from S3 and has a pending change stays until the user discards its changes.
+- A publish is not possible while a conflict is open.
+- The app does not create an object.
 - A publish uses the stored ETag as a condition.
 - A publish repeats the content type, the metadata and the encryption settings of the object.
 - A value does not go into a URL or into the log.

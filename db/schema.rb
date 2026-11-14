@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_11_14_000004) do
+ActiveRecord::Schema[8.1].define(version: 2026_11_14_000005) do
   create_table "active_storage_attachments", force: :cascade do |t|
     t.string "name", null: false
     t.string "record_type", null: false
@@ -47,6 +47,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_11_14_000004) do
     t.datetime "fetched_at", null: false
     t.text "content"
     t.boolean "too_large", default: false, null: false
+    t.boolean "deleted_in_s3", default: false, null: false
     t.index [ "bucket", "key" ], name: "index_env_files_on_bucket_and_key", unique: true
   end
 
@@ -57,6 +58,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_11_14_000004) do
     t.integer "line_count", null: false
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
+    t.text "base_values"
     t.index [ "env_file_id", "name" ], name: "index_pending_choices_on_env_file_id_and_name", unique: true
     t.index [ "env_file_id" ], name: "index_pending_choices_on_env_file_id"
   end
@@ -67,6 +69,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_11_14_000004) do
     t.text "value", null: false
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
+    t.text "base_value"
     t.index [ "env_file_id", "name" ], name: "index_pending_edits_on_env_file_id_and_name", unique: true
     t.index [ "env_file_id" ], name: "index_pending_edits_on_env_file_id"
   end

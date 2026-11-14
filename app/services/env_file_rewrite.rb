@@ -7,18 +7,15 @@ class EnvFileRewrite
     result = file.parsed_contents
     raise Invalid, result.error if result.error
 
-    choices = file.pending_choices.index_by(&:name)
-    result.entries.group_by(&:name).transform_values do |entries|
-      choice = choices[entries.last.name]
-      choice ? choice.kept_entry(entries) : entries.last
-    end
+    EnvFileConflicts.new(file).entries
   end
 
   def self.call(file, edits = file.pending_edits.to_a)
     rewrite(file, edits).text
   end
 
-  def self.rewrite(file, edits = file.pending_edits.to_a)
+  def self.rewrite(file, edits = file.pending_edits.to_a, check_conflicts: true)
+    EnvFileConflicts.ensure_publishable!(file) if check_conflicts
     new(file, edits).call
   end
 
@@ -29,7 +26,7 @@ class EnvFileRewrite
 
   def call
     entries = self.class.entries(@file)
-    choices = @file.pending_choices.to_a
+    choices = EnvFileConflicts.new(@file).active_choices
     choices.each { |choice| validate!(choice) }
     replacements = @edits.to_h do |edit|
       validate!(edit)

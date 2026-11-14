@@ -1,6 +1,6 @@
 class EnvFilesController < ApplicationController
   before_action :prevent_caching
-  before_action :load_file, only: %i[show edit update_edit choice update_choice delete_choice discard review publish]
+  before_action :load_file, only: %i[show edit update_edit delete_edit choice update_choice delete_choice discard review publish]
   param_encoding :update_edit, :value, Encoding::ASCII_8BIT
   rescue_from EnvFileRewrite::Invalid, with: :invalid_edit
   rescue_from EnvFileEditing::MissingVariable, with: :missing_variable
@@ -11,7 +11,7 @@ class EnvFilesController < ApplicationController
   rescue_from Aws::Errors::InvalidSSOToken, with: :expired_login
   rescue_from Aws::Errors::NoSuchProfileError, with: :missing_profile
   rescue_from ActiveRecord::Encryption::Errors::Configuration, with: :missing_encryption_key
-  rescue_from Aws::S3::Errors::PreconditionFailed, with: :stale_snapshot
+  rescue_from EnvFileEditing::StaleSnapshot, with: :stale_edit
 
   def index
     @bucket = ENV["ENVS_S3_BUCKET"].presence
@@ -22,12 +22,14 @@ class EnvFilesController < ApplicationController
   def show
     @result = @env_file.parsed_contents
     @edits = @env_file.pending_edits.index_by(&:name)
-    @choices = @env_file.pending_choices.index_by(&:name)
+    conflicts = EnvFileConflicts.new(@env_file)
+    @choices = conflicts.active_choices.index_by(&:name)
+    @conflicts = conflicts.all
   end
 
   def edit
     load_entry
-    @value = @env_file.pending_edits.find_by(name: @name)&.value || @entry.value
+    @value = @edit ? @edit.value : @entry.value
   rescue EnvFileEditing::MissingVariable
     raise ActiveRecord::RecordNotFound, cause: nil
   end
@@ -35,15 +37,21 @@ class EnvFilesController < ApplicationController
   def update_edit
     load_entry
     @value = params.permit(:value).fetch(:value).dup.force_encoding(Encoding::UTF_8)
-    EnvFileEditing.save(@env_file, name: @name, value: @value)
+    EnvFileEditing.save(@env_file, name: @name, value: @value, etag: params.permit(:etag)[:etag])
     redirect_to s3_file_path(@env_file), notice: "Saved the local change."
+  end
+
+  def delete_edit
+    EnvFileEditing.delete(@env_file, name: params.permit(:name).fetch(:name))
+    redirect_to s3_file_path(@env_file), notice: "Discarded the local change."
   end
 
   def choice
     @name = params.permit(:name).fetch(:name)
     @entries = EnvFileChoices.entries(@env_file, @name)
     @choice = @env_file.pending_choices.find_by(name: @name)
-    @selected = @choice ? @choice.kept_entry(@entries) : @entries.last
+    @conflicted = @choice && EnvFileConflicts.new(@env_file).choice_conflict?(@choice)
+    @selected = @choice && !@conflicted ? @choice.kept_entry(@entries) : @entries.last
   end
 
   def update_choice
@@ -59,7 +67,7 @@ class EnvFilesController < ApplicationController
 
   def discard
     EnvFileEditing.discard(@env_file)
-    redirect_to s3_file_path(@env_file), notice: "Discarded the local changes."
+    redirect_to @env_file.destroyed? ? s3_path : s3_file_path(@env_file), notice: "Discarded the local changes."
   end
 
   def review
@@ -68,8 +76,15 @@ class EnvFilesController < ApplicationController
   end
 
   def publish
-    EnvFilePublish.call(@env_file)
-    redirect_to s3_file_path(@env_file), notice: "Published the env file to S3."
+    result = EnvFilePublish.call(@env_file)
+    case result
+    when :changed
+      redirect_to s3_file_path(@env_file), alert: "The file changed in S3. Check the changes again."
+    when :deleted
+      redirect_to s3_file_path(@env_file), alert: "This file is no longer in S3."
+    else
+      redirect_to s3_file_path(@env_file), notice: "Published the env file to S3."
+    end
   end
 
   def refresh
@@ -92,6 +107,8 @@ class EnvFilesController < ApplicationController
   def load_entry
     @name = params.permit(:name).fetch(:name)
     @entry = EnvFileEditing.entry_for_name(@env_file, @name)
+    @edit = @env_file.pending_edits.find_by(name: @name)
+    @conflicted = @edit && EnvFileConflicts.new(@env_file).edit_conflict?(@edit)
   end
 
   def invalid_edit(error)
@@ -108,8 +125,10 @@ class EnvFilesController < ApplicationController
     redirect_to s3_file_path(@env_file), alert: error.message
   end
 
-  def stale_snapshot
-    redirect_to s3_file_path(@env_file), alert: "The file changed in S3. Refresh before publishing. Your edits are kept."
+  def stale_edit(error)
+    edit
+    @error = error.message
+    render :edit, status: :unprocessable_content
   end
 
   def s3_operation

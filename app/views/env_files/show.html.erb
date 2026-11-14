@@ -5,14 +5,23 @@
 <p class="text-mono color-fg-muted variable-text"><%= @env_file.key %></p>
 <div class="d-flex flex-wrap flex-items-center mb-3">
   <% if @env_file.pending_changes? %>
-    <%= link_to "Review & publish", review_s3_file_path(@env_file), class: "btn btn-primary mr-2" %>
+    <% if @env_file.deleted_in_s3? || @conflicts.any? %>
+      <button class="btn mr-2" disabled>Review &amp; publish</button>
+    <% else %>
+      <%= link_to "Review & publish", review_s3_file_path(@env_file), class: "btn btn-primary mr-2" %>
+    <% end %>
     <%= button_to "Discard changes", discard_s3_changes_path(@env_file), class: "btn btn-danger" %>
   <% else %>
     <button class="btn mr-2" disabled>Review &amp; publish</button>
   <% end %>
 </div>
+<% if @env_file.deleted_in_s3? %>
+  <div class="flash flash-error mb-3" role="alert">This file is no longer in S3. Your changes cannot be published.</div>
+<% elsif @conflicts.any? %>
+  <%= render "conflicts", conflicts: @conflicts, env_file: @env_file %>
+<% end %>
 <% if @result.error %>
   <div class="flash flash-error" role="alert"><%= @result.error %></div>
 <% else %>
-  <%= render "variables/list", result: @result, env_file: @env_file, edits: @edits, choices: @choices %>
+  <%= render "variables/list", result: @result, env_file: @env_file, edits: @edits, choices: @choices, conflicts: @conflicts %>
 <% end %>

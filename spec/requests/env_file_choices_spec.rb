@@ -31,7 +31,7 @@ RSpec.describe "Resolving repeated names", type: :request do
   end
 
   def edit(value, name: "SAME")
-    post edit_s3_variable_path(file), params: { name: name, value: value }
+    post edit_s3_variable_path(file), params: { name: name, value: value, etag: file.reload.etag }
   end
 
   def put_body
@@ -222,6 +222,7 @@ RSpec.describe "Resolving repeated names", type: :request do
     edit("changed")
     previous = [ file.reload.attributes, PendingChoice.first!.attributes, PendingEdit.first!.attributes ]
     client.stub_responses(:put_object, "PreconditionFailed")
+    client.stub_responses(:get_object, body: text, etag: file.etag, last_modified: file.last_modified)
     post publish_s3_file_path(file)
     expect(flash[:alert]).to include("file changed in S3")
     expect([ file.reload.attributes, PendingChoice.first!.attributes, PendingEdit.first!.attributes ]).to eq(previous)
@@ -244,20 +245,20 @@ RSpec.describe "Resolving repeated names", type: :request do
     expect(document.at_css('input[checked]')["value"]).to eq("5")
   end
 
-  it "deletes a choice when refresh changes the count and reconciles the value edit against the last line" do
+  it "keeps a conflicting choice and reconciles the value edit against the last line" do
     choose(2)
     edit("last")
     refresh_to("SAME=first\nSAME=last\n")
-    expect(PendingChoice.count).to eq(0)
+    expect(PendingChoice.count).to eq(1)
     expect(PendingEdit.count).to eq(0)
   end
 
-  it "deletes a choice when refresh removes the file" do
+  it "keeps a choice when refresh removes the file" do
     choose(2)
     client.stub_responses(:list_objects_v2, contents: [])
     post refresh_s3_path
-    expect(EnvFile.exists?(file.id)).to be(false)
-    expect(PendingChoice.count).to eq(0)
+    expect(file.reload).to be_deleted_in_s3
+    expect(PendingChoice.count).to eq(1)
   end
 
   it "does not log the displayed values when choosing a line" do
