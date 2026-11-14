@@ -88,9 +88,9 @@ RSpec.describe "Container env file contents", type: :request do
       it "warns separately for two repeated names with two and three lines and no values" do
         show_contents("BARE\nA=private-one\nB=private-two\nA=private-three\nB=private-four\nB=private-five\n")
         warning = document.at_css('[aria-label="Repeated names"]')
-        expect(warning.css("p").map(&:text)).to eq([
-          "A is on lines 2 and 4. Only line 4 takes effect.",
-          "B is on lines 3, 5 and 6. Only line 6 takes effect."
+        expect(warning.css("p").map { |node| node.text.squish }).to eq([
+          "A is on lines 2 and 4. Only line 4 takes effect.#{source == :s3 ? " Resolve" : ""}",
+          "B is on lines 3, 5 and 6. Only line 6 takes effect.#{source == :s3 ? " Resolve" : ""}"
         ])
         expect(warning.text).not_to include("private-")
         expect(document.css(".flash-warn").size).to eq(2)

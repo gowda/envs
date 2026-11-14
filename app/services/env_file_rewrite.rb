@@ -1,37 +1,94 @@
 class EnvFileRewrite
   class Invalid < StandardError; end
+  Operation = Data.define(:kind, :old_text, :new_text)
+  Result = Data.define(:text, :operations)
 
   def self.entries(file)
     result = file.parsed_contents
     raise Invalid, result.error if result.error
 
-    result.entries.index_by(&:name)
+    choices = file.pending_choices.index_by(&:name)
+    result.entries.group_by(&:name).transform_values do |entries|
+      choice = choices[entries.last.name]
+      choice ? choice.kept_entry(entries) : entries.last
+    end
   end
 
   def self.call(file, edits = file.pending_edits.to_a)
-    entries = entries(file)
-    expected = {}
-    lines = file.content.to_s.b.lines
-    edits.each do |edit|
-      raise Invalid, edit.errors.full_messages.join(" ") unless edit.valid?
+    rewrite(file, edits).text
+  end
 
+  def self.rewrite(file, edits = file.pending_edits.to_a)
+    new(file, edits).call
+  end
+
+  def initialize(file, edits)
+    @file = file
+    @edits = edits
+  end
+
+  def call
+    entries = self.class.entries(@file)
+    choices = @file.pending_choices.to_a
+    choices.each { |choice| validate!(choice) }
+    replacements = @edits.to_h do |edit|
+      validate!(edit)
       entry = entries[edit.name]
       raise Invalid, "The variable no longer exists. Refresh the file." unless entry
 
-      line = lines.fetch(entry.line_number - 1)
-      ending = line[/\r\n\z|\n\z|\r\z/] || ""
-      lines[entry.line_number - 1] = line.byteslice(0, line.index("=") + 1) + edit.value.b + ending
-      expected[entry.line_number] = edit.value.dup.force_encoding(Encoding::UTF_8)
+      [ entry.line_number, edit.value ]
     end
-    text = lines.join
+    chosen_names = choices.map(&:name).to_set
+    removed = @file.parsed_contents.entries.select do |entry|
+      chosen_names.include?(entry.name) && entries.fetch(entry.name) != entry
+    end.map(&:line_number).to_set
+    operations = operations_for(removed, replacements)
+    text = operations.map(&:new_text).join
+    validate_text!(text, removed, replacements, chosen_names)
+    Result.new(text, operations)
+  end
+
+  private
+
+  def validate!(record)
+    raise Invalid, record.errors.full_messages.join(" ") unless record.valid?
+  end
+
+  def operations_for(removed, replacements)
+    lines = @file.content.to_s.b.lines
+    bom = lines.first&.start_with?("\uFEFF".b) && removed.include?(1)
+    operations = lines.each_with_index.map do |line, index|
+      number = index + 1
+      replacement = if removed.include?(number)
+        "".b
+      elsif replacements.key?(number)
+        ending = line[/\r\n\z|\n\z|\r\z/] || ""
+        line.byteslice(0, line.index("=") + 1) + replacements.fetch(number).b + ending
+      else
+        line
+      end
+      kind = removed.include?(number) ? :remove : (replacement == line ? :keep : :change)
+      Operation.new(kind, line, replacement)
+    end
+    if bom
+      index = operations.index { |operation| operation.kind != :remove }
+      operation = operations.fetch(index)
+      operations[index] = Operation.new(:change, operation.old_text, "\uFEFF".b + operation.new_text)
+    end
+    operations
+  end
+
+  def validate_text!(text, removed, replacements, chosen_names)
     result = EnvFileContents.call(text)
     raise Invalid, result.error if result.error
 
-    wanted = file.parsed_contents.entries.map do |entry|
-      EnvFileContents::Entry.new(entry.line_number, entry.name, expected.fetch(entry.line_number, entry.value))
+    wanted = @file.parsed_contents.entries.reject { |entry| removed.include?(entry.line_number) }.map do |entry|
+      [ entry.name, replacements.fetch(entry.line_number, entry.value).dup.force_encoding(Encoding::UTF_8) ]
     end
-    raise Invalid, "The edit changes another entry." unless result.entries == wanted
-
-    text
+    actual = result.entries.map { |entry| [ entry.name, entry.value ] }
+    counts = result.entries.map(&:name).tally
+    unless actual == wanted && chosen_names.all? { |name| counts[name] == 1 }
+      raise Invalid, "The edit changes another entry."
+    end
   end
 end

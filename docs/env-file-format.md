@@ -22,9 +22,9 @@ These rules preserve the values a container receives, rather than interpreting t
 
 ## Repeated names
 
-Repeated names remain separate entries in file order. Only the last line with a name takes effect, and only that line is editable in an S3 file.
+Repeated names remain separate entries in file order. Only the last line with a name takes effect before publishing. On an S3 file, **Resolve** lets you choose which line stays. See [S3 editing](s3.md#editing) for the choice and publish steps.
 
-Earlier lines with that name have an **Overridden** label. A warning gives the line numbers for each repeated name. S3 cards have a **Repeated names** label when the file has repeated names.
+Without a choice, earlier lines with that name have an **Overridden** label. With a choice, the other lines have a **Removed** label. Publishing removes those lines and applies any value edit to the line that stays. Uploaded files have no **Resolve** link. A warning gives the line numbers for each repeated name. S3 cards have a **Repeated names** label when the file has repeated names.
 
 ## Lines without `=`
 

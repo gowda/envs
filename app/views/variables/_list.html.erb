@@ -12,18 +12,22 @@
 <% if repeated_names.any? %>
   <div class="flash flash-warn mb-3" role="alert" aria-label="Repeated names">
     <% repeated_names.each do |name, entries| %>
-      <p class="mb-0 variable-text"><%= name %> is on lines <%= entries.map(&:line_number).to_sentence(last_word_connector: " and ") %>. Only line <%= entries.last.line_number %> takes effect.</p>
+      <% choice = local_assigns.fetch(:choices, {})[name] %>
+      <% kept = choice&.kept_entry(entries) %>
+      <p class="mb-0 variable-text"><%= name %> is on lines <%= entries.map(&:line_number).to_sentence(last_word_connector: " and ") %>. <% if choice %>Line <%= kept.line_number %> stays. A publish removes lines <%= entries.reject { |entry| entry == kept }.map(&:line_number).to_sentence(last_word_connector: " and ") %>.<% else %>Only line <%= entries.last.line_number %> takes effect.<% end %><% if local_assigns[:env_file] %> <%= link_to choice ? "Change" : "Resolve", s3_variable_choice_path(env_file, name: name) %><% end %></p>
     <% end %>
   </div>
 <% end %>
 <section aria-label="Variables" class="Box">
   <div class="Box-header"><h2 class="Box-title">Variables <span class="Label"><%= result.entries.size %></span></h2></div>
   <% result.entries.each do |entry| %>
-    <% effective = entries_by_name.fetch(entry.name).last == entry %>
+    <% choice = local_assigns.fetch(:choices, {})[entry.name] %>
+    <% entries = entries_by_name.fetch(entry.name) %>
+    <% effective = (choice ? choice.kept_entry(entries) : entries.last) == entry %>
     <% edit = effective ? local_assigns.fetch(:edits, {})[entry.name] : nil %>
     <% value = edit ? edit.value : entry.value %>
     <div class="Box-row d-flex">
-      <div class="col-4 pr-3"><span class="text-mono text-bold variable-text"><%= entry.name %></span><% unless effective %> <span class="Label">Overridden</span><% end %></div>
+      <div class="col-4 pr-3"><span class="text-mono text-bold variable-text"><%= entry.name %></span><% unless effective %> <span class="Label"><%= choice ? "Removed" : "Overridden" %></span><% end %></div>
       <div class="col-8">
         <span class="text-mono variable-text variable-value"><%= value %></span>
         <% if edit %><span class="Label Label--accent">Modified</span><% end %>

@@ -5,7 +5,7 @@ class EnvFilePublish
 
   def self.call(file)
     file.with_lock do
-      raise EnvFileRewrite::Invalid, "There are no changes to publish." unless file.pending_edits.exists?
+      raise EnvFileRewrite::Invalid, "There are no changes to publish." unless file.pending_changes?
 
       raise EnvFileRewrite::Invalid, "Refresh the file to obtain its ETag before publishing." if file.etag.blank?
 
@@ -20,6 +20,7 @@ class EnvFilePublish
       now = Time.current
       file.update!(content: text, etag: response.etag, last_modified: now, fetched_at: now)
       file.pending_edits.delete_all
+      file.pending_choices.delete_all
     end
   end
 end

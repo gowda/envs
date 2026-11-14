@@ -1,23 +1,29 @@
 class EnvFileDiff
   Row = Data.define(:old_number, :new_number, :marker, :text, :kind)
 
-  def self.call(old_text, new_text)
-    old_lines = old_text.dup.force_encoding(Encoding::UTF_8).lines
-    new_lines = new_text.dup.force_encoding(Encoding::UTF_8).lines
-    changed = old_lines.each_index.select { |index| old_lines[index] != new_lines[index] }
-    visible = changed.flat_map { |index| ([ 0, index - 3 ].max..[ old_lines.size - 1, index + 3 ].min).to_a }.uniq.sort
+  def self.call(operations)
+    changed = operations.each_index.select { |index| operations[index].kind != :keep }
+    visible = changed.flat_map { |index| ([ 0, index - 3 ].max..[ operations.size - 1, index + 3 ].min).to_a }.to_set
     previous = nil
-    visible.flat_map do |index|
+    new_number = 0
+    operations.each_with_index.flat_map do |operation, index|
+      new_number += 1 unless operation.kind == :remove
+      next [] unless visible.include?(index)
+
       rows = []
       rows << Row.new(nil, nil, "…", "", "gap") if previous && index > previous + 1
-      if old_lines[index] == new_lines[index]
-        rows << Row.new(index + 1, index + 1, " ", old_lines[index].chomp, "context")
+      if operation.kind == :keep
+        rows << Row.new(index + 1, new_number, " ", display(operation.old_text), "context")
       else
-        rows << Row.new(index + 1, nil, "-", old_lines[index].chomp, "deletion")
-        rows << Row.new(nil, index + 1, "+", new_lines[index].chomp, "addition")
+        rows << Row.new(index + 1, nil, "-", display(operation.old_text), "deletion")
+        rows << Row.new(nil, new_number, "+", display(operation.new_text), "addition") unless operation.kind == :remove
       end
       previous = index
       rows
     end
+  end
+
+  def self.display(text)
+    text.dup.force_encoding(Encoding::UTF_8).chomp
   end
 end

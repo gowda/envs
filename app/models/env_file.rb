@@ -1,6 +1,11 @@
 class EnvFile < ApplicationRecord
   encrypts :content
   has_many :pending_edits, dependent: :delete_all
+  has_many :pending_choices, dependent: :delete_all
+
+  def pending_changes?
+    pending_edits.any? || pending_choices.any?
+  end
 
   def file_name
     File.basename(key)

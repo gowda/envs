@@ -10,7 +10,10 @@ class EnvFileEditing
   end
 
   def self.discard(file)
-    file.with_lock { file.pending_edits.delete_all }
+    file.with_lock do
+      file.pending_edits.delete_all
+      file.pending_choices.delete_all
+    end
   end
 
   def self.save(file, name:, value:)
@@ -29,7 +32,12 @@ class EnvFileEditing
   end
 
   def self.reconcile(file)
-    entries = file.parsed_contents.entries.index_by(&:name)
+    counts = file.parsed_contents.entries.map(&:name).tally
+    file.pending_choices.each do |choice|
+      choice.destroy! if counts[choice.name] != choice.line_count
+    end
+    file.pending_choices.reset
+    entries = file.parsed_contents.error ? {} : EnvFileRewrite.entries(file)
     file.pending_edits.each do |edit|
       entry = entries[edit.name]
       edit.destroy! if !entry || entry.value == edit.value
