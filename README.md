@@ -105,3 +105,7 @@ The interface uses vendored Primer CSS 21.5.1 under the MIT licence.
 ## Security
 
 The app encrypts S3 snapshots and local edits. It does not write a value to the log or to a URL. Don't put a real value in an issue when reporting a problem.
+
+## License
+
+envs is released under the [MIT License](LICENSE).
