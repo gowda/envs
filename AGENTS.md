@@ -32,6 +32,12 @@ The app supports local edits to S3 snapshots and publishes the changes to S3.
 - `/` redirects to `/files`.
 - `/files` is the upload page. `/files/<public id>` shows a stored upload.
 - `/s3` lists the S3 snapshots as cards. `/s3/<id>` shows one file.
+- `POST /s3/<id>/reveal` shows one secret name on the file page.
+- `POST /s3/<id>/edits/reveal` shows one secret name on the edit page.
+- `POST /s3/<id>/choices/reveal` shows one secret name on the choice page.
+- `POST /s3/<id>/review/reveal` shows one secret name in the review.
+- `EnvFileVisibility` masks secret values and review lines for each request.
+- `env_files/_visibility` renders the Show button or the Hide link.
 - `POST /s3/<id>/value_types` sets a type. The form sends the name and value_type as parameters.
 - `env_files` holds S3 references, times, flags, validation errors and line numbers without =.
 - `env_file_variables` holds each assignment with its position, line number, name, value and type.
@@ -84,7 +90,20 @@ The app supports local edits to S3 snapshots and publishes the changes to S3.
 - The app stores no S3 object text, comment line or line without =.
 - The app does not set a type without a request from the user.
 - A type is not a pending change.
-- The app does not mask a value yet.
+- The app masks each value of a secret name with `••••••••`.
+- A masked response holds no value of that secret name, including pending values and bases.
+- Plain and null-type values stay visible.
+- Show posts one name and renders the same page with status 200.
+- Show reveals only that secret name for that request.
+- Show stores no reveal state.
+- If the name is not a secret of the file, Show reveals nothing.
+- Each visible secret has a Hide link to the normal page.
+- A secret edit field stays empty, including after Show and a refused save.
+- If a secret edit field is empty, the app saves nothing and shows `Type a value.`.
+- The review masks each secret line after the first `=`, including old, new and nearby lines.
+- Review Show fetches and checks the S3 object with the same rules as the normal review.
+- Every S3 response uses `Cache-Control: no-store`.
+- Uploaded files have no mask and no Show button.
 - A value edit changes the value of one line.
 - A choice for a repeated name removes the other lines with that name on publish.
 - Nothing adds a line.
