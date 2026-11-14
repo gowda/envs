@@ -1,0 +1,14 @@
+<% if names.any? %>
+  <section class="Box mb-3" aria-label="Suggestions">
+    <div class="Box-header"><h2 class="Box-title">Suggestions</h2></div>
+    <% names.each do |name| %>
+      <div class="Box-row">
+        <p class="variable-text"><%= name %> looks like a secret.</p>
+        <div class="d-flex">
+          <%= button_to "Mark as secret", s3_value_types_path(env_file), params: { name: name, value_type: "secret" }, class: "btn mr-2" %>
+          <%= button_to "Dismiss", s3_value_types_path(env_file), params: { name: name, value_type: "plain", dismiss: "1" }, class: "btn" %>
+        </div>
+      </div>
+    <% end %>
+  </section>
+<% end %>

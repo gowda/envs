@@ -29,6 +29,7 @@
     <div class="Box-row d-flex">
       <div class="col-4 pr-3"><span class="text-mono text-bold variable-text"><%= entry.name %></span><% unless effective %> <span class="Label"><%= choice ? "Removed" : "Overridden" %></span><% end %></div>
       <div class="col-8">
+        <% if local_assigns[:env_file] && local_assigns.fetch(:value_types, {})[entry.name] == "secret" %><span class="Label">Secret</span><% end %>
         <span class="text-mono variable-text variable-value"><%= value %></span>
         <% if local_assigns.fetch(:conflicts, []).any? { |conflict| conflict.name == entry.name } %><span class="Label Label--danger">Conflict</span><% end %>
         <% if edit %><span class="Label Label--accent">Modified</span><% end %>

@@ -1,0 +1,235 @@
+require "rails_helper"
+
+RSpec.describe "S3 variable types", type: :request do
+  include ActiveSupport::Testing::TimeHelpers
+
+  let(:bucket) { "invented-bucket" }
+  let(:text) { "POSTGRES_PASSWORD=invented-first\nPOSTGRES_PASSWORD=invented-last\napi-key=invented-key\nTZ=UTC\n" }
+  let!(:file) { EnvFile.create!(bucket: bucket, key: "invented.env", content: text, etag: '"old"', fetched_at: Time.current) }
+  let(:client) { Aws::S3::Client.new(stub_responses: true, region: "us-east-1") }
+
+  around do |example|
+    previous = ENV["ENVS_S3_BUCKET"]
+    ENV["ENVS_S3_BUCKET"] = bucket
+    travel_to(Time.utc(2026, 11, 14, 12)) { example.run }
+  ensure
+    previous ? ENV["ENVS_S3_BUCKET"] = previous : ENV.delete("ENVS_S3_BUCKET")
+  end
+
+  before do
+    allow(EnvFileRefresh).to receive(:client).and_return(client)
+    allow(EnvFilePublish).to receive(:client).and_return(client)
+  end
+
+  def document
+    Nokogiri::HTML5(response.body)
+  end
+
+  def suggestions
+    document.css('[aria-label="Suggestions"] .Box-row')
+  end
+
+  def rows
+    document.css('[aria-label="Variables"] .Box-row')
+  end
+
+  def mark(name = "POSTGRES_PASSWORD", value_type: "secret", dismiss: false)
+    post s3_value_types_path(file), params: { name: name, value_type: value_type, dismiss: dismiss ? "1" : "0" }
+    expect(response).to redirect_to(s3_file_path(file))
+    expect(response.headers["Cache-Control"]).to eq("no-store")
+    follow_redirect!
+  end
+
+  def refresh(text)
+    client.stub_responses(:list_objects_v2, contents: [ { key: file.key, size: text.bytesize } ])
+    client.stub_responses(:get_object, body: text, etag: '"refreshed"')
+    post refresh_s3_path
+  end
+
+  it "suggests each undecided qualifying name once, without deciding or inspecting values" do
+    file.update!(content: text + "Db.Token=x\nSECRET=y\nKEYBOARD=secret\nPASSPORT=password\nMONKEY=token\n")
+    get s3_file_path(file)
+    expect(suggestions.map { |row| row.at_css("p").text }).to eq([
+      "POSTGRES_PASSWORD looks like a secret.", "api-key looks like a secret.",
+      "Db.Token looks like a secret.", "SECRET looks like a secret."
+    ])
+    expect(suggestions.map { |row| row.css("button").map(&:text) }).to all(eq([ "Mark as secret", "Dismiss" ]))
+    expect(document.css("section").map { |section| section["aria-label"] }).to eq([ "Suggestions", "Variables" ])
+    expect(VariableType.count).to eq(0)
+    file.update!(content: "KEYBOARD=secret\nPASSPORT=password\nMONKEY=token\nTZ=PASSWORD\n")
+    get s3_file_path(file)
+    expect(document.at_css('[aria-label="Suggestions"]')).to be_nil
+  end
+
+  it "marks a repeated name immediately, labels every line and removes its suggestion" do
+    mark
+    expect(document.text).to include("Marked POSTGRES_PASSWORD as secret.")
+    row = VariableType.sole
+    expect(row.attributes.slice("bucket", "key", "name", "value_type")).to eq(
+      "bucket" => bucket, "key" => file.key, "name" => "POSTGRES_PASSWORD", "value_type" => "secret")
+    expect(rows.first(2).map { |entry| entry.css(".Label").map(&:text) }).to eq([ [ "Overridden", "Secret" ], [ "Secret" ] ])
+    expect(rows.map { |entry| entry.at_css(".variable-value").text }).to eq([ "invented-first", "invented-last", "invented-key", "UTC" ])
+    expect(suggestions.map(&:text).join).not_to include("POSTGRES_PASSWORD")
+    expect(file.reload).not_to be_pending_changes
+    get s3_path
+    expect(document.at_css("a.Box").text).not_to include("Modified", "Secret")
+  end
+
+  it "dismisses a suggestion as an explicit plain type" do
+    mark(value_type: "plain", dismiss: true)
+    expect(VariableType.sole).to be_plain
+    expect(document.text).to include("Dismissed the suggestion for POSTGRES_PASSWORD.")
+    expect(rows.css(".Label").map(&:text)).not_to include("Secret")
+    expect(suggestions.map(&:text).join).not_to include("POSTGRES_PASSWORD")
+    mark("api-key", value_type: "plain", dismiss: true)
+    expect(document.at_css('[aria-label="Suggestions"]')).to be_nil
+  end
+
+  it "shows the default type on edit and lets the user switch both ways" do
+    get edit_s3_variable_path(file, name: "TZ")
+    expect(document.text).to include("Type: plain")
+    expect(document.css("button").map(&:text)).to include("Mark as secret")
+    expect(document.css("button").map(&:text)).not_to include("Mark as plain")
+    mark("TZ")
+    get edit_s3_variable_path(file, name: "TZ")
+    expect(document.text).to include("Type: secret")
+    expect(document.css("button").map(&:text)).to include("Mark as plain")
+    expect(document.css("button").map(&:text)).not_to include("Mark as secret")
+    mark("TZ", value_type: "plain")
+    expect(document.text).to include("Marked TZ as plain.")
+    expect(VariableType.sole).to be_plain
+  end
+
+  it "refuses an unknown type, a missing name, an invalid snapshot and a deleted file without changing stored types" do
+    mark
+    original = VariableType.sole.attributes
+    [
+      [ { name: "POSTGRES_PASSWORD", value_type: "unknown" }, "Choose secret or plain." ],
+      [ { name: "MISSING", value_type: "plain" }, "The variable no longer exists." ]
+    ].each do |input, message|
+      post s3_value_types_path(file), params: input
+      expect(response).to redirect_to(s3_file_path(file))
+      follow_redirect!
+      expect(document.at_css(".flash-error").text).to include(message)
+      expect(VariableType.sole.attributes).to eq(original)
+    end
+    file.update!(content: "INVALID")
+    mark(value_type: "plain")
+    expect(document.at_css(".flash-error").text).not_to be_empty
+    expect(VariableType.sole.attributes).to eq(original)
+    file.update!(content: text, deleted_in_s3: true)
+    mark(value_type: "plain")
+    expect(document.at_css(".flash-error").text).to include("no longer in S3")
+    expect(VariableType.sole.attributes).to eq(original)
+  end
+
+  it "keeps the review, choices and edits unchanged and retains types after discard and publish" do
+    post s3_variable_choice_path(file), params: { name: "POSTGRES_PASSWORD", line_number: 1, line_count: 2 }
+    post edit_s3_variable_path(file), params: { name: "POSTGRES_PASSWORD", value: "invented-edit", etag: file.etag }
+    get review_s3_file_path(file)
+    review = document.at_css("main .Box").to_html
+    edits = file.pending_edits.map(&:attributes)
+    choices = file.pending_choices.map(&:attributes)
+    get s3_file_path(file)
+    modified_count = document.css(".Label").count { |label| label.text == "Modified" }
+    mark
+    expect(document.css(".Label").count { |label| label.text == "Modified" }).to eq(modified_count)
+    expect(file.pending_edits.reload.map(&:attributes)).to eq(edits)
+    expect(file.pending_choices.reload.map(&:attributes)).to eq(choices)
+    get review_s3_file_path(file)
+    expect(document.at_css("main .Box").to_html).to eq(review)
+    post discard_s3_changes_path(file)
+    expect(file.reload).not_to be_pending_changes
+    expect(VariableType.sole).to be_secret
+    post s3_variable_choice_path(file), params: { name: "POSTGRES_PASSWORD", line_number: 1, line_count: 2 }
+    post edit_s3_variable_path(file), params: { name: "POSTGRES_PASSWORD", value: "invented-published", etag: file.etag }
+    client.stub_responses(:head_object, content_type: "text/plain")
+    client.stub_responses(:put_object, etag: '"published"')
+    post publish_s3_file_path(file)
+    expect(response).to redirect_to(s3_file_path(file))
+    expect(file.reload.content).to include("POSTGRES_PASSWORD=invented-published")
+    expect(file).not_to be_pending_changes
+    expect(VariableType.sole).to be_secret
+  end
+
+  it "retains the type through refreshes, missing names and deletion and re-creation of the snapshot" do
+    mark
+    original = VariableType.sole.attributes
+    refresh(text.sub("invented-last", "invented-refreshed"))
+    get s3_file_path(file)
+    expect(rows.first(2).map(&:text)).to all(include("Secret"))
+    refresh("TZ=UTC\n")
+    get s3_file_path(file)
+    expect(rows.map(&:text).join).not_to include("Secret")
+    refresh(text)
+    get s3_file_path(file)
+    expect(rows.first(2).map(&:text)).to all(include("Secret"))
+    old_id = file.id
+    client.stub_responses(:list_objects_v2, contents: [])
+    post refresh_s3_path
+    expect(EnvFile.exists?(old_id)).to be(false)
+    expect(VariableType.sole.attributes).to eq(original)
+    refresh(text)
+    restored = EnvFile.find_by!(bucket: bucket, key: file.key)
+    expect(restored.id).not_to eq(old_id)
+    get s3_file_path(restored)
+    expect(rows.first(2).map(&:text)).to all(include("Secret"))
+    expect(suggestions.map(&:text).join).not_to include("POSTGRES_PASSWORD")
+  end
+
+  it "scopes the type to both bucket and key" do
+    mark
+    other = EnvFile.create!(bucket: bucket, key: "other.env", content: text, fetched_at: Time.current)
+    get s3_file_path(other)
+    expect(suggestions.map(&:text).join).to include("POSTGRES_PASSWORD")
+    expect(rows.css(".Label").map(&:text)).not_to include("Secret")
+    ENV["ENVS_S3_BUCKET"] = "other-invented-bucket"
+    other.update!(bucket: ENV["ENVS_S3_BUCKET"], key: file.key)
+    get s3_file_path(other)
+    expect(suggestions.map(&:text).join).to include("POSTGRES_PASSWORD")
+    expect(rows.css(".Label").map(&:text)).not_to include("Secret")
+  end
+
+  it "shows no suggestions for invalid, oversized or deleted S3 files" do
+    [ { content: "INVALID" }, { too_large: true }, { deleted_in_s3: true } ].each do |attributes|
+      file.update!({ content: text, too_large: false, deleted_in_s3: false }.merge(attributes))
+      get s3_file_path(file)
+      expect(document.at_css('[aria-label="Suggestions"]')).to be_nil
+      expect(response.headers["Cache-Control"]).to eq("no-store")
+    end
+  end
+
+  it "leaves uploads unchanged even for a name marked secret in S3" do
+    mark
+    upload = Rack::Test::UploadedFile.new(StringIO.new(text), "text/plain", true, original_filename: "invented.env")
+    post files_path, params: { file: upload }
+    follow_redirect!
+    expect(response).to have_http_status(:ok)
+    expect(document.at_css('[aria-label="Suggestions"]')).to be_nil
+    expect(rows.css(".Label").map(&:text)).not_to include("Secret")
+    expect(document.css("button")).to be_empty
+    expect(response.headers["Cache-Control"]).to eq("no-store")
+  end
+
+  it "uses normal POST forms and never puts a value in a URL or log" do
+    output = StringIO.new
+    logger = ActiveSupport::Logger.new(output)
+    original = ActiveRecord::Base.logger
+    ActiveRecord::Base.logger = logger
+    allow(Rails).to receive(:logger).and_return(logger)
+    get s3_file_path(file)
+    form = suggestions.first.at_css("form")
+    expect(form["method"]).to eq("post")
+    expect(form["action"]).to eq(s3_value_types_path(file))
+    expect(form.at_css('input[name="name"]')["value"]).to eq("POSTGRES_PASSWORD")
+    expect(form.at_css('input[name="value_type"]')["value"]).to eq("secret")
+    post form["action"], params: { name: "POSTGRES_PASSWORD", value_type: "secret" }
+    expect(response.location).not_to include("invented-first", "invented-last", "invented-key")
+    follow_redirect!
+    urls = document.css("[href], [action]").flat_map { |node| [ node["href"], node["action"] ].compact }
+    expect(urls.join).not_to include("invented-first", "invented-last", "invented-key")
+    expect(output.string).not_to include("invented-first", "invented-last", "invented-key")
+  ensure
+    ActiveRecord::Base.logger = original
+  end
+end

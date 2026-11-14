@@ -32,6 +32,10 @@ The app supports local edits to S3 snapshots and publishes the changes to S3.
 - `/` redirects to `/files`.
 - `/files` is the upload page. `/files/<public id>` shows a stored upload.
 - `/s3` lists the S3 snapshots as cards. `/s3/<id>` shows one file.
+- `POST /s3/<id>/value_types` sets a type. The form sends the name and value_type as parameters.
+- `VariableType` stores a type by bucket, key and name, independently of the snapshot.
+- `SecretName` checks names for secret suggestions.
+- `EnvFileValueTypes` saves types and finds suggestions for undecided names.
 - `EnvFileContents` reads an env file and holds the validity rules for every source.
 - `variables/_list` renders the variable list for every source.
 - `/s3/<id>/edits?name=<name>` is the edit page of one variable.
@@ -64,6 +68,11 @@ The app supports local edits to S3 snapshots and publishes the changes to S3.
 - Without a choice, only the last line with that name is editable.
 - The app warns the user about a repeated name.
 - Only an S3 file is editable.
+- A variable of an S3 file has a type, secret or plain.
+- A name with no type is plain.
+- The app does not set a type without a request from the user.
+- A type is not a pending change.
+- The app does not mask a value yet.
 - A value edit changes the value of one line.
 - A choice for a repeated name removes the other lines with that name on publish.
 - Nothing adds a line.
