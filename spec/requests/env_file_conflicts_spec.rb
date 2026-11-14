@@ -174,19 +174,28 @@ RSpec.describe "S3 conflicts", type: :request do
     end
   end
 
-  it "saves nothing from a stale form and shows the current three values and ETag" do
+  it "keeps the typed value on a stale form with the current conflict values and ETag" do
     edit
     get edit_s3_variable_path(file, name: "FIRST")
     etag = document.at_css('input[name="etag"]')["value"]
     refresh_to(text.sub("base-one", "remote-one"))
     previous = PendingEdit.first!.attributes
-    edit("stale-local", etag: etag)
+    output = StringIO.new
+    logger = ActiveSupport::Logger.new(output)
+    original_logger = ActiveRecord::Base.logger
+    ActiveRecord::Base.logger = logger
+    allow(Rails).to receive(:logger).and_return(logger)
+    edit("invented-typed", etag: etag)
     expect(response).to have_http_status(:unprocessable_content)
     expect(response.headers["Cache-Control"]).to eq("no-store")
     expect(document.text).to include("The file changed in S3. Check the value and save again.", "remote-one", "base-one")
-    expect(document.at_css('input[name="value"]')["value"]).to eq("local-one")
+    expect(document.at_css('input[name="value"]')["value"]).to eq("invented-typed")
     expect(document.at_css('input[name="etag"]')["value"]).to eq('"refreshed"')
     expect(PendingEdit.first!.attributes).to eq(previous)
+    expect(document.css("a, form").map { |node| node["href"] || node["action"] }.join).not_to include("invented-typed")
+    expect(output.string).not_to include("invented-typed")
+  ensure
+    ActiveRecord::Base.logger = original_logger
   end
 
   it "saves no new edit from a stale form" do
@@ -196,8 +205,21 @@ RSpec.describe "S3 conflicts", type: :request do
     edit("unsaved-local", etag: etag)
     expect(response).to have_http_status(:unprocessable_content)
     expect(document.text).to include("The file changed in S3. Check the value and save again.")
-    expect(document.at_css('input[name="value"]')["value"]).to eq("remote-one")
+    expect(document.at_css('input[name="value"]')["value"]).to eq("unsaved-local")
     expect(PendingEdit.count).to eq(0)
+  end
+
+  it "scrubs invalid UTF-8 in a typed value on a stale save" do
+    edit
+    previous = PendingEdit.first!.attributes
+    refresh_to(text.sub("base-one", "remote-one"))
+    post edit_s3_variable_path(file), params: "name=FIRST&value=invented-%FF&etag=%22old%22",
+      headers: { "CONTENT_TYPE" => "application/x-www-form-urlencoded" }
+    expect(response).to have_http_status(:unprocessable_content)
+    expect(document.text).to include("The file changed in S3. Check the value and save again.")
+    expect(document.at_css('input[name="value"]')["value"]).to eq("invented-\uFFFD")
+    expect(document.at_css('input[name="etag"]')["value"]).to eq('"refreshed"')
+    expect(PendingEdit.first!.attributes).to eq(previous)
   end
 
   it "keeps every line to resolve a conflicting choice" do

@@ -126,7 +126,8 @@ class EnvFilesController < ApplicationController
   end
 
   def stale_edit(error)
-    edit
+    load_entry
+    @value = @value.to_s.scrub
     @error = error.message
     render :edit, status: :unprocessable_content
   end
