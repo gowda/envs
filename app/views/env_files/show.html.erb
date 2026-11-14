@@ -4,7 +4,7 @@
 </div>
 <p class="text-mono color-fg-muted variable-text"><%= @env_file.key %></p>
 <div class="d-flex flex-wrap flex-items-center mb-3">
-  <% if @edits.any? %>
+  <% if @env_file.pending_changes? %>
     <%= link_to "Review & publish", review_s3_file_path(@env_file), class: "btn btn-primary mr-2" %>
     <%= button_to "Discard changes", discard_s3_changes_path(@env_file), class: "btn btn-danger" %>
   <% else %>
@@ -14,5 +14,5 @@
 <% if @result.error %>
   <div class="flash flash-error" role="alert"><%= @result.error %></div>
 <% else %>
-  <%= render "variables/list", result: @result, env_file: @env_file, edits: @edits %>
+  <%= render "variables/list", result: @result, env_file: @env_file, edits: @edits, choices: @choices %>
 <% end %>

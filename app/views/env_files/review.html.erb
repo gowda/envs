@@ -16,5 +16,5 @@
     </tbody>
   </table>
 </div>
-<% if @env_file.pending_edits.any? %><%= button_to "Publish", publish_s3_file_path(@env_file), class: "btn btn-primary mb-2" %><% end %>
+<% if @env_file.pending_changes? %><%= button_to "Publish", publish_s3_file_path(@env_file), class: "btn btn-primary mb-2" %><% end %>
 <%= link_to "Cancel", s3_file_path(@env_file), class: "btn" %>

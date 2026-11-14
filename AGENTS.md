@@ -36,7 +36,12 @@ The app supports local edits to S3 snapshots and publishes the changes to S3.
 - `variables/_list` renders the variable list for every source.
 - `/s3/<id>/edits?name=<name>` is the edit page of one variable.
 - `/s3/<id>/review` shows the difference before a publish.
-- `PendingEdit` holds a local change.
+- `/s3/<id>/choices?name=<name>` shows the lines for a repeated name.
+- `PendingEdit` holds a local value edit.
+- `PendingChoice` holds the occurrence to keep and the count when chosen.
+- `EnvFileChoices` saves or deletes a choice.
+- `EnvFileEditing` saves, discards and reconciles pending changes.
+- `EnvFileDiff` builds review rows from the rewrite operations.
 - `EnvFileRewrite` applies the changes to the snapshot text.
 - `EnvFilePublish` writes the file to S3.
 
@@ -52,11 +57,14 @@ The app supports local edits to S3 snapshots and publishes the changes to S3.
 - The identity of a variable is its name.
 - Do not identify a variable by a line number.
 - If a name is repeated, only the last line with that name takes effect.
-- If a name is repeated, only the last line with that name is editable.
+- If a name has a choice, only the line that stays is editable.
+- Without a choice, only the last line with that name is editable.
 - The app warns the user about a repeated name.
 - Only an S3 file is editable.
-- An edit changes the value of one line and nothing else.
-- An edit does not add or remove a line.
+- A value edit changes the value of one line.
+- A choice for a repeated name removes the other lines with that name on publish.
+- Nothing adds a line.
+- A rewrite changes no other text and preserves the byte order mark at the start.
 - A publish uses the stored ETag as a condition.
 - A publish repeats the content type, the metadata and the encryption settings of the object.
 - A value does not go into a URL or into the log.

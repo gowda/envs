@@ -1,6 +1,6 @@
 class EnvFilesController < ApplicationController
   before_action :prevent_caching
-  before_action :load_file, only: %i[show edit update_edit discard review publish]
+  before_action :load_file, only: %i[show edit update_edit choice update_choice delete_choice discard review publish]
   param_encoding :update_edit, :value, Encoding::ASCII_8BIT
   rescue_from EnvFileRewrite::Invalid, with: :invalid_edit
   rescue_from EnvFileEditing::MissingVariable, with: :missing_variable
@@ -15,13 +15,14 @@ class EnvFilesController < ApplicationController
 
   def index
     @bucket = ENV["ENVS_S3_BUCKET"].presence
-    @env_files = EnvFile.where(bucket: @bucket).includes(:pending_edits).order(:key)
+    @env_files = EnvFile.where(bucket: @bucket).includes(:pending_edits, :pending_choices).order(:key)
     ActiveRecord::Encryption.config.primary_key if @env_files.exists?
   end
 
   def show
     @result = @env_file.parsed_contents
     @edits = @env_file.pending_edits.index_by(&:name)
+    @choices = @env_file.pending_choices.index_by(&:name)
   end
 
   def edit
@@ -38,14 +39,32 @@ class EnvFilesController < ApplicationController
     redirect_to s3_file_path(@env_file), notice: "Saved the local change."
   end
 
+  def choice
+    @name = params.permit(:name).fetch(:name)
+    @entries = EnvFileChoices.entries(@env_file, @name)
+    @choice = @env_file.pending_choices.find_by(name: @name)
+    @selected = @choice ? @choice.kept_entry(@entries) : @entries.last
+  end
+
+  def update_choice
+    input = params.permit(:name, :line_number, :line_count)
+    EnvFileChoices.save(@env_file, name: input.fetch(:name), line_number: input.fetch(:line_number), line_count: input.fetch(:line_count))
+    redirect_to s3_file_path(@env_file), notice: "Saved the local choice."
+  end
+
+  def delete_choice
+    EnvFileChoices.delete(@env_file, name: params.permit(:name).fetch(:name))
+    redirect_to s3_file_path(@env_file), notice: "Kept every line."
+  end
+
   def discard
     EnvFileEditing.discard(@env_file)
     redirect_to s3_file_path(@env_file), notice: "Discarded the local changes."
   end
 
   def review
-    @text = EnvFileRewrite.call(@env_file)
-    @rows = EnvFileDiff.call(@env_file.content, @text)
+    result = EnvFileRewrite.rewrite(@env_file)
+    @rows = EnvFileDiff.call(result.operations)
   end
 
   def publish

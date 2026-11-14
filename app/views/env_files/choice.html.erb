@@ -1,0 +1,24 @@
+<% content_for :title, "Resolve #{@name} · envs" %>
+<div class="Subhead"><h1 class="Subhead-heading">Resolve repeated name</h1></div>
+<p class="text-mono variable-text"><%= @env_file.key %></p>
+<p>Choose the line to keep for <strong class="text-mono variable-text"><%= @name %></strong>. A publish removes the other lines with this name.</p>
+<%= form_with url: s3_variable_choice_path(@env_file), method: :post, local: true do |form| %>
+  <%= form.hidden_field :name, value: @name %>
+  <%= form.hidden_field :line_count, value: @entries.size %>
+  <fieldset class="Box mb-3">
+    <legend class="sr-only">Line to keep</legend>
+    <% @entries.each do |entry| %>
+      <div class="Box-row">
+        <%= form.radio_button :line_number, entry.line_number, checked: entry == @selected %>
+        <%= form.label :line_number, value: entry.line_number do %>
+          Line <%= entry.line_number %>: <span class="text-mono variable-text"><%= entry.value %></span>
+        <% end %>
+      </div>
+    <% end %>
+  </fieldset>
+  <%= form.submit "Keep selected line", class: "btn btn-primary" %>
+  <%= link_to "Cancel", s3_file_path(@env_file), class: "btn" %>
+<% end %>
+<% if @choice %>
+  <%= button_to "Keep every line", s3_variable_choice_path(@env_file), method: :delete, params: { name: @name }, class: "btn mt-3" %>
+<% end %>
