@@ -10,17 +10,30 @@ class EnvFileRewrite
     EnvFileConflicts.new(file).entries
   end
 
-  def self.call(file, edits = file.pending_edits.to_a)
-    rewrite(file, edits).text
+  def self.call(file, text:, edits: file.pending_edits.to_a)
+    rewrite(file, text: text, edits: edits).text
   end
 
-  def self.rewrite(file, edits = file.pending_edits.to_a, check_conflicts: true)
+  def self.rewrite(file, text:, edits: file.pending_edits.to_a, check_conflicts: true)
     EnvFileConflicts.ensure_publishable!(file) if check_conflicts
-    new(file, edits).call
+    new(file, text, edits).call
   end
 
-  def initialize(file, edits)
+  def self.validate_entries!(file, edits)
+    edits.each { |edit| raise Invalid, edit.errors.full_messages.join(" ") unless edit.valid? }
+    values = edits.index_by(&:name)
+    selected = entries(file)
+    text = file.parsed_contents.entries.map do |entry|
+      value = selected[entry.name] == entry && values[entry.name] ? values[entry.name].value : entry.value
+      "#{entry.name}=#{value}\n"
+    end.join
+    result = EnvFileContents.call(text)
+    raise Invalid, result.error if result.error
+  end
+
+  def initialize(file, text, edits)
     @file = file
+    @text = text
     @edits = edits
   end
 
@@ -52,7 +65,7 @@ class EnvFileRewrite
   end
 
   def operations_for(removed, replacements)
-    lines = @file.content.to_s.b.lines
+    lines = @text.b.lines
     bom = lines.first&.start_with?("\uFEFF".b) && removed.include?(1)
     operations = lines.each_with_index.map do |line, index|
       number = index + 1

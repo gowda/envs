@@ -67,7 +67,7 @@ Settings and secrets come from environment variables. Restart the app after chan
 | `ENVS_S3_BUCKET` | Required bucket name for S3 access. |
 | `ENVS_S3_PREFIX` | Optional listing prefix; defaults to an empty prefix. |
 | `AWS_REGION` | AWS region for the bucket. |
-| `ENVS_ENCRYPTION_KEY` | Required primary key for Active Record encryption of S3 snapshots and local edits. |
+| `ENVS_ENCRYPTION_KEY` | Key for Active Record encryption of secret values and their pending changes. |
 
 Use the standard AWS credential chain. Grant `s3:ListBucket` on the bucket, plus `s3:GetObject` and `s3:PutObject` on the selected objects.
 
@@ -77,7 +77,7 @@ Generate an encryption key:
 openssl rand -hex 32
 ```
 
-Keep the key stable and secure: existing snapshots need the same key. See [S3 configuration](docs/s3.md#configuration) for encryption details.
+Keep the key stable and secure: stored secrets need the same key. See [S3 configuration](docs/s3.md#configuration) for encryption details.
 
 ## How env files are read
 
@@ -85,7 +85,7 @@ The first `=` separates a name from its literal value. Quotes, spaces, commands 
 
 ## How it works
 
-SQLite holds S3 snapshots and local edits, with their content encrypted through Active Record encryption. Local edits are stored beside the snapshot and shown on the page. The snapshot changes only after a publish succeeds. An ETag is a tag that S3 changes when an object's content changes. A publish uses the stored ETag as a condition to avoid overwriting a changed object.
+SQLite holds S3 references, variable rows and local edits. Secret values and their pending values and bases use Active Record encryption; others stay as written. Review and publish fetch the text from S3. An ETag is a tag that S3 changes when an object's content changes. A publish uses the stored ETag as a condition to avoid overwriting a changed object.
 
 Active Storage keeps uploads on local disk under `storage/`; test uploads use `tmp/storage/`. Stimulus through importmap handles file selection and drop uploads. The app does not load uploaded variables into its environment.
 
@@ -104,7 +104,7 @@ The interface uses vendored Primer CSS 21.5.1 under the MIT licence.
 
 ## Security
 
-The app encrypts S3 snapshots and local edits. It does not write a value to the log or to a URL. Don't put a real value in an issue when reporting a problem.
+The app encrypts secret values and their pending changes. It does not write a value to the log or to a URL. Don't put a real value in an issue when reporting a problem.
 
 ## License
 

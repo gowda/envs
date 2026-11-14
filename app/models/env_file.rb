@@ -1,5 +1,6 @@
 class EnvFile < ApplicationRecord
-  encrypts :content
+  has_many :variables, -> { order(:position) }, class_name: "EnvFileVariable", dependent: :delete_all
+  serialize :unassigned_lines, coder: JSON
   has_many :pending_edits, dependent: :delete_all
   has_many :pending_choices, dependent: :delete_all
 
@@ -12,10 +13,8 @@ class EnvFile < ApplicationRecord
   end
 
   def parsed_contents
-    if too_large?
-      EnvFileContents::Result.new([], EnvFileContents::TOO_LARGE_MESSAGE, [])
-    else
-      EnvFileContents.call(content.to_s)
-    end
+    error = too_large? ? EnvFileContents::TOO_LARGE_MESSAGE : parse_error
+    entries = error ? [] : variables.map { |row| EnvFileContents::Entry.new(row.line_number, row.name, row.value) }
+    EnvFileContents::Result.new(entries, error, unassigned_lines || [])
   end
 end

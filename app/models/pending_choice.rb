@@ -1,7 +1,8 @@
 class PendingChoice < ApplicationRecord
   belongs_to :env_file
-  serialize :base_values, coder: JSON
-  encrypts :base_values
+  include TypedValues
+  enum :value_type, { secret: "secret", plain: "plain" }, validate: { allow_nil: true }
+  stores_typed_values :base_values, json: true
 
   validates :name, presence: true, uniqueness: { scope: :env_file_id }
   validates :keep_occurrence, numericality: { only_integer: true, greater_than: 0 }

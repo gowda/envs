@@ -6,7 +6,7 @@ RSpec.describe "Resolving repeated names", type: :request do
   let(:bucket) { "invented-bucket" }
   let(:client) { Aws::S3::Client.new(stub_responses: true, region: "us-east-1") }
   let(:text) { "# keep\nSAME=first\nOTHER=unchanged\nSAME=middle\nSAME=last\nTAIL=end\n" }
-  let!(:file) { EnvFile.create!(bucket: bucket, key: "invented.env", content: text, etag: '"old"', fetched_at: Time.current) }
+  let!(:file) { create_env_file(bucket: bucket, key: "invented.env", content: text, etag: '"old"', fetched_at: Time.current) }
 
   around do |example|
     previous = ENV["ENVS_S3_BUCKET"]
@@ -46,7 +46,7 @@ RSpec.describe "Resolving repeated names", type: :request do
 
   it "offers Resolve on S3, lists the lines and defaults to the last without putting a value in a URL" do
     name = "API/KEY.part?"
-    file.update!(content: text.gsub("SAME", name))
+    update_env_file(file, content: text.gsub("SAME", name))
     get s3_file_path(file)
     link = document.css('a').find { |node| node.text == "Resolve" }
     uri = URI.parse(link["href"])
@@ -84,7 +84,7 @@ RSpec.describe "Resolving repeated names", type: :request do
     choose(2)
     expect(response).to redirect_to(s3_file_path(file))
     expect(PendingChoice.count).to eq(1)
-    expect(file.reload.content).to eq(text)
+    expect(snapshot_entries(file)).to eq(entries_from(text))
     get s3_variable_choice_path(file, name: "SAME")
     expect(document.at_css('input[checked]')["value"]).to eq("2")
     delete_form = document.css("main form").find { |form| form.text.include?("Keep every line") }
@@ -121,7 +121,7 @@ RSpec.describe "Resolving repeated names", type: :request do
       post publish_s3_file_path(file)
       expected = "# keep\n#{line == 2 ? "SAME=edited\n" : ""}OTHER=unchanged\n#{line != 2 ? "SAME=edited\n" : ""}TAIL=end\n"
       expect(put_body).to eq(expected)
-      expect(file.reload.content).to eq(expected)
+      expect(snapshot_entries(file)).to eq(entries_from(expected))
       expect(file.etag).to eq('"new"')
       expect(file.fetched_at).to eq(Time.current)
       expect(file.last_modified).to eq(Time.current)
@@ -132,12 +132,12 @@ RSpec.describe "Resolving repeated names", type: :request do
   end
 
   it "publishes choices for two names without any value edits" do
-    file.update!(content: "A=one\nB=two\nA=three\nB=four\nB=five\n")
+    update_env_file(file, content: "A=one\nB=two\nA=three\nB=four\nB=five\n")
     choose(1, name: "A", count: 2)
     choose(4, name: "B")
     post publish_s3_file_path(file)
     expect(put_body).to eq("A=one\nB=four\n")
-    expect(file.reload.content).to eq(put_body)
+    expect(snapshot_entries(file)).to eq(entries_from(put_body))
     expect(PendingChoice.count).to eq(0)
   end
 
@@ -147,7 +147,7 @@ RSpec.describe "Resolving repeated names", type: :request do
     choose(3)
     expect(PendingChoice.count).to eq(0)
     [ { content: "INVALID NAME=value\n" }, { content: nil, too_large: true } ].each do |attributes|
-      file.update!(attributes)
+      update_env_file(file, **attributes)
       choose(2)
       expect(response).to redirect_to(s3_file_path(file))
       expect(PendingChoice.count).to eq(0)
@@ -159,7 +159,7 @@ RSpec.describe "Resolving repeated names", type: :request do
       choose(2)
       previous = PendingChoice.first!.attributes
       get s3_variable_choice_path(file, name: "SAME")
-      file.update!(content: content)
+      update_env_file(file, content: content)
       choose(4)
       expect(response).to redirect_to(s3_file_path(file))
       expect(flash[:alert]).to eq("The lines changed. Refresh the file.")
@@ -187,10 +187,10 @@ RSpec.describe "Resolving repeated names", type: :request do
 
   it "preserves all other bytes, including the BOM, CRLF, indentation and an absent final newline" do
     original = "\uFEFFSAME=first\r\n# unchanged\r\n  SAME=middle\r\n\tOTHER=literal # = \r\nSAME=last".b
-    file.update!(content: original)
+    update_env_file(file, content: original)
     choose(3)
     edit("new")
-    result = EnvFileRewrite.rewrite(file.reload)
+    result = EnvFileRewrite.rewrite(file.reload, text: original)
     expect(result.text.b).to eq("\uFEFF# unchanged\r\n  SAME=new\r\n\tOTHER=literal # = \r\n".b)
     expect(result.operations.map(&:kind)).to eq(%i[remove change change keep remove])
     expect(result.operations.map(&:old_text).join.b).to eq(original)
@@ -234,7 +234,7 @@ RSpec.describe "Resolving repeated names", type: :request do
     post discard_s3_changes_path(file)
     expect(PendingChoice.count).to eq(0)
     expect(PendingEdit.count).to eq(0)
-    expect(file.reload.content).to eq(text)
+    expect(snapshot_entries(file)).to eq(entries_from(text))
   end
 
   it "keeps a choice through refresh with the same count, even with a preceding line" do

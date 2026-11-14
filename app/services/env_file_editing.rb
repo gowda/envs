@@ -38,10 +38,11 @@ class EnvFileEditing
 
       entry = entry_for_name(file, name)
       edit = file.pending_edits.find_or_initialize_by(name: name)
+      edit.value_type = file.variables.find_by!(name: name).value_type
       edit.assign_attributes(value: value, base_value: entry.value)
       entries = EnvFileRewrite.entries(file)
       edits = file.pending_edits.to_a.reject { |other| other.name == name || !entries.key?(other.name) }
-      EnvFileRewrite.rewrite(file, edits + [ edit ], check_conflicts: false)
+      EnvFileRewrite.validate_entries!(file, edits + [ edit ])
       if value == entry.value
         edit.destroy! if edit.persisted?
       else
