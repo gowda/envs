@@ -1,6 +1,6 @@
 class EnvFilesController < ApplicationController
   before_action :prevent_caching
-  before_action :load_file, only: %i[show edit update_edit delete_edit choice update_choice delete_choice discard review publish update_value_type]
+  before_action :load_file, except: %i[index refresh]
   param_encoding :update_edit, :value, Encoding::ASCII_8BIT
   rescue_from EnvFileRewrite::Invalid, with: :invalid_edit
   rescue_from EnvFileEditing::MissingVariable, with: :missing_variable
@@ -32,6 +32,30 @@ class EnvFilesController < ApplicationController
     @value = @edit ? @edit.value : @entry.value
   rescue EnvFileEditing::MissingVariable
     raise ActiveRecord::RecordNotFound, cause: nil
+  end
+
+  def reveal
+    show
+    render :show
+  end
+
+  def reveal_edit
+    return reveal unless @env_file.variables.exists?(name: params[:name])
+
+    edit
+    render :edit
+  end
+
+  def reveal_choice
+    return reveal unless @env_file.variables.where(name: params[:name]).many?
+
+    choice
+    render :choice
+  end
+
+  def reveal_review
+    review
+    render :review unless performed?
   end
 
   def update_value_type
@@ -111,6 +135,8 @@ class EnvFilesController < ApplicationController
 
   def load_file
     @env_file = EnvFile.where(bucket: ENV["ENVS_S3_BUCKET"].presence).find(params[:id])
+    revealed_name = params.permit(:name)[:name] if %w[reveal reveal_edit reveal_choice reveal_review].include?(action_name)
+    @visibility = EnvFileVisibility.new(@env_file, revealed_name: revealed_name)
   end
 
   def load_entry

@@ -5,6 +5,7 @@
 <% if @conflicted %>
   <div class="flash flash-warn mb-3" role="alert">The lines changed in S3. Choose again.</div>
 <% end %>
+<%= render "visibility", name: @name, normal_path: s3_variable_choice_path(@env_file, name: @name), reveal_path: reveal_s3_choice_path(@env_file) %>
 <%= form_with url: s3_variable_choice_path(@env_file), method: :post, local: true do |form| %>
   <%= form.hidden_field :name, value: @name %>
   <%= form.hidden_field :line_count, value: @entries.size %>
@@ -14,7 +15,7 @@
       <div class="Box-row">
         <%= form.radio_button :line_number, entry.line_number, checked: entry == @selected %>
         <%= form.label :line_number, value: entry.line_number do %>
-          Line <%= entry.line_number %>: <span class="text-mono variable-text"><%= entry.value %></span>
+          Line <%= entry.line_number %>: <span class="text-mono variable-text"><%= @visibility.value(@name, entry.value) %></span>
         <% end %>
       </div>
     <% end %>
