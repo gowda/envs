@@ -24,7 +24,7 @@ class EnvFilesController < ApplicationController
     bucket = ENV["ENVS_S3_BUCKET"].presence
     if bucket
       count = EnvFileRefresh.call(bucket: bucket, prefix: ENV.fetch("ENVS_S3_PREFIX", ""))
-      redirect_to s3_path, notice: "Refreshed #{count} dotenv #{"file".pluralize(count)} from S3."
+      redirect_to s3_path, notice: "Refreshed #{count} env #{"file".pluralize(count)} from S3."
     else
       redirect_to s3_path, alert: "Set ENVS_S3_BUCKET, AWS_REGION and ENVS_ENCRYPTION_KEY before refreshing."
     end

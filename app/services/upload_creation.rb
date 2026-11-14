@@ -3,11 +3,11 @@ class UploadCreation
 
   def self.call(file)
     unless file.is_a?(ActionDispatch::Http::UploadedFile)
-      return Result.new(nil, "Choose a dotenv file to upload.")
+      return Result.new(nil, "Choose an env file to upload.")
     end
 
-    contents = file.read(DotenvContents::MAX_BYTES + 1).to_s
-    result = DotenvContents.call(contents)
+    contents = file.read(EnvFileContents::MAX_BYTES + 1).to_s
+    result = EnvFileContents.call(contents)
     return Result.new(nil, result.error) if result.error
 
     upload = Upload.new

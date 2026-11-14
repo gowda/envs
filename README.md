@@ -1,6 +1,6 @@
 # envs
 
-envs displays variables from S3 dotenv files and uploaded dotenv files. It uses Rails 8.1 and Ruby 3.4.12.
+envs displays variables from S3 env files and uploaded env files. It uses Rails 8.1 and Ruby 3.4.12.
 
 - Run `bin/setup` to install dependencies and prepare SQLite.
 - Run `bin/rails server` to start the app.
@@ -8,7 +8,7 @@ envs displays variables from S3 dotenv files and uploaded dotenv files. It uses 
 - Open `/s3` to view local snapshots of S3 files.
 - Select **Refresh from S3** to fetch the current files and remove snapshots of deleted files.
 - Select a file card to view its variables.
-- Open `/files` to select or drop a UTF-8 dotenv file of 1 MB or less.
+- Open `/files` to select or drop a UTF-8 env file of 1 MB or less.
 - The app displays variables in file order and preserves literal commands and references.
 - Valid uploads are stored on local disk and redirect to `/files/<public ID>`.
 - The disk service stores uploads under `storage/` and test uploads under `tmp/storage/`.
@@ -18,6 +18,28 @@ envs displays variables from S3 dotenv files and uploaded dotenv files. It uses 
 - Use invented values in examples and test files. Do not commit secrets.
 - Run `bundle exec rspec` to run the specs.
 - Run `bin/ci` to run the local checks and specs.
+
+## Env file rules
+
+The app reads files as Docker and Amazon ECS do. Each entry uses one line.
+
+- The file must use valid UTF-8 and contain at least one entry with `=`.
+- The file size limit is 1 MB. The line size limit is 65,536 bytes, without the line ending.
+- The reader removes a UTF-8 byte order mark from the first line only.
+- The reader removes leading whitespace from each line.
+- The reader skips empty lines and lines that start with `#` after leading whitespace.
+- The first `=` separates the name from the value.
+- The name must not be empty or contain a space or a tab.
+- The value is the exact text after `=`, including quotes, spaces, more `=` signs and `#`.
+- `KEY=` has an empty value.
+- CRLF line endings are accepted. The value does not include the CR.
+- Quotes do not join lines. Values cannot span lines.
+- Shell commands, variable references and escape sequences stay literal.
+- Repeated names remain separate entries in file order. Each repeated name has a Duplicate label.
+- A line without `=` is invalid if its name contains a space or a tab after leading whitespace is removed.
+- Other lines without `=` have a warning with their line numbers. The app does not read the host environment.
+- Docker takes these values from the host environment or drops these lines. ECS gives these lines no value.
+- Invalid files show an error. Errors identify the line and reason without showing a value.
 
 ## S3 settings
 

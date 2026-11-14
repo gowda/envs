@@ -7,9 +7,9 @@ class EnvFile < ApplicationRecord
 
   def parsed_contents
     if too_large?
-      DotenvContents::Result.new(nil, DotenvContents::TOO_LARGE_MESSAGE)
+      EnvFileContents::Result.new([], EnvFileContents::TOO_LARGE_MESSAGE, [])
     else
-      DotenvContents.call(content.to_s)
+      EnvFileContents.call(content.to_s)
     end
   end
 end

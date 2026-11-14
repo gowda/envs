@@ -16,7 +16,7 @@ class UploadsController < ApplicationController
 
   def show
     @upload = Upload.find_by!(public_id: params[:id])
-    @variables = DotenvContents.call(@upload.file.download).variables
+    @result = EnvFileContents.call(@upload.file.download)
   end
 
   private

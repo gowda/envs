@@ -39,7 +39,6 @@ group :development do
   gem "web-console"
 end
 
-gem "dotenv", "= 3.2.0", require: "dotenv/parser"
 gem "aws-sdk-s3", "~> 1.237"
 
 gem "importmap-rails", "= 2.2.3"

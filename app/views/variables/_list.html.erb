@@ -1,17 +1,19 @@
-<section aria-label="Variables" class="Box">
-  <div class="Box-header"><h2 class="Box-title">Variables <span class="Label"><%= variables.size %></span></h2></div>
-  <% variables.each do |key, value| %>
-    <% if value.include?("\n") %>
-      <div class="Box-row">
-        <div class="text-mono text-bold variable-text mb-2"><%= key %></div>
-        <pre class="text-mono variable-text mb-0">
-<%= value %></pre>
-      </div>
+<% if result.unassigned_lines.any? %>
+  <div class="flash flash-warn mb-3" role="alert">
+    <% if result.unassigned_lines.one? %>
+      Line <%= result.unassigned_lines.first %> has no =. A container gets no value from this line.
     <% else %>
-      <div class="Box-row d-flex">
-        <div class="col-4 pr-3 text-mono text-bold variable-text"><%= key %></div>
-        <div class="col-8 text-mono variable-text"><%= value %></div>
-      </div>
+      Lines <%= result.unassigned_lines.join(", ") %> have no =. A container gets no value from these lines.
     <% end %>
+  </div>
+<% end %>
+<% counts = result.entries.map(&:name).tally %>
+<section aria-label="Variables" class="Box">
+  <div class="Box-header"><h2 class="Box-title">Variables <span class="Label"><%= result.entries.size %></span></h2></div>
+  <% result.entries.each do |entry| %>
+    <div class="Box-row d-flex">
+      <div class="col-4 pr-3"><span class="text-mono text-bold variable-text"><%= entry.name %></span><% if counts[entry.name] > 1 %> <span class="Label">Duplicate</span><% end %></div>
+      <div class="col-8 text-mono variable-text"><%= entry.value %></div>
+    </div>
   <% end %>
 </section>

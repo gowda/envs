@@ -6,5 +6,5 @@
 <% if @result.error %>
   <div class="flash flash-error" role="alert"><%= @result.error %></div>
 <% else %>
-  <%= render "variables/list", variables: @result.variables %>
+  <%= render "variables/list", result: @result %>
 <% end %>
