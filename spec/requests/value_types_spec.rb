@@ -100,6 +100,51 @@ RSpec.describe "S3 variable types", type: :request do
     expect(VariableType.sole).to be_plain
   end
 
+  [ 80, 6_000 ].each do |length|
+    it "keeps a #{length}-character name intact and bounds all three type messages" do
+      name = "PASSWORD_" + "x" * (length - 9)
+      file.update!(content: "#{name}=invented-value\n")
+      get s3_file_path(file)
+      expect(suggestions.sole.at_css("p").text).to eq("#{name} looks like a secret.")
+      expect(rows.sole.at_css(".text-bold").text).to eq(name)
+      get edit_s3_variable_path(file, name: name)
+      expect(document.at_css('label[for="value"]').text).to eq(name)
+      expect(document.at_css('input[name="name"]')["value"]).to eq(name)
+
+      shown_name = length > 80 ? "#{name.first(80)}…" : name
+      [
+        [ "secret", false, "Marked #{shown_name} as secret." ],
+        [ "plain", true, "Dismissed the suggestion for #{shown_name}." ],
+        [ "plain", false, "Marked #{shown_name} as plain." ]
+      ].each do |value_type, dismiss, message|
+        mark(name, value_type: value_type, dismiss: dismiss)
+        expect(VariableType.sole.name).to eq(name)
+        expect(VariableType.sole.value_type).to eq(value_type)
+        expect(document.at_css(".flash-success").text).to eq(message)
+        expect(rows.sole.at_css(".text-bold").text).to eq(name)
+      end
+    end
+  end
+
+  [ "plain", "secret" ].each do |value_type|
+    [ :invalid_value, :stale_snapshot ].each do |refusal|
+      it "keeps the #{value_type} type and its button after refusing a value for #{refusal}" do
+        mark(value_type: value_type)
+        params = { name: "POSTGRES_PASSWORD", value: "invented-edit", etag: file.etag }
+        refusal == :invalid_value ? params[:value] = "invalid\nvalue" : params[:etag] = '"stale"'
+        post edit_s3_variable_path(file), params: params
+        expect(response).to have_http_status(:unprocessable_content)
+        expect(document.at_css(".flash-error")).not_to be_nil
+        expect(document.text).to include("Type: #{value_type}")
+        form = document.css("form").find { |node| node["action"] == s3_value_types_path(file) }
+        expect(form.at_css("button").text).to eq(value_type == "secret" ? "Mark as plain" : "Mark as secret")
+        expect(form.at_css('input[name="value_type"]')["value"]).to eq(value_type == "secret" ? "plain" : "secret")
+        expect(VariableType.sole.value_type).to eq(value_type)
+        expect(PendingEdit.count).to eq(0)
+      end
+    end
+  end
+
   it "refuses an unknown type, a missing name, an invalid snapshot and a deleted file without changing stored types" do
     mark
     original = VariableType.sole.attributes

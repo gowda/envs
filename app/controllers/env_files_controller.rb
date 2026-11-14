@@ -114,6 +114,7 @@ class EnvFilesController < ApplicationController
   def load_entry
     @name = params.permit(:name).fetch(:name)
     @entry = EnvFileEditing.entry_for_name(@env_file, @name)
+    @value_type = EnvFileValueTypes.new(@env_file).types.fetch(@name, "plain")
     @edit = @env_file.pending_edits.find_by(name: @name)
     @conflicted = @edit && EnvFileConflicts.new(@env_file).edit_conflict?(@edit)
   end
