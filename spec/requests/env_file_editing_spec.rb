@@ -28,8 +28,8 @@ RSpec.describe "Editing and publishing S3 files", type: :request do
     Nokogiri::HTML5(response.body)
   end
 
-  def save(value, line: 1)
-    post edit_s3_variable_path(file, line_number: line), params: { value: value }
+  def save(value, name: "FIRST")
+    post edit_s3_variable_path(file), params: { name: name, value: value }
   end
 
   def show_file
@@ -43,8 +43,8 @@ RSpec.describe "Editing and publishing S3 files", type: :request do
   it "saves, updates, reverts and discards encrypted local edits with row and card labels" do
     show_file
     expect(document.at_css("button[disabled]").text).to eq("Review & publish")
-    expect(document.css('a').count { |link| link.text == "Edit" }).to eq(4)
-    get edit_s3_variable_path(file, line_number: 1)
+    expect(document.css('a').count { |link| link.text == "Edit" }).to eq(3)
+    get edit_s3_variable_path(file, name: "FIRST")
     expect(response.headers["Cache-Control"]).to eq("no-store")
     expect(document.at_css('input[name="value"]')["value"]).to eq("one")
     expect(document.at_css('a.btn')["href"]).to eq(s3_file_path(file))
@@ -53,8 +53,8 @@ RSpec.describe "Editing and publishing S3 files", type: :request do
     save("invented-private-value")
     expect(response).to redirect_to(s3_file_path(file))
     edit = PendingEdit.first!
-    expect(edit.attributes.slice("name", "occurrence", "value"))
-      .to eq("name" => "FIRST", "occurrence" => 1, "value" => "invented-private-value")
+    expect(edit.attributes.slice("name", "value"))
+      .to eq("name" => "FIRST", "value" => "invented-private-value")
     raw = PendingEdit.connection.select_value("SELECT value FROM pending_edits WHERE id = #{edit.id.to_i}")
     expect(raw).not_to include("invented-private-value")
     expect(JSON.parse(raw)).to have_key("p")
@@ -66,7 +66,7 @@ RSpec.describe "Editing and publishing S3 files", type: :request do
     get s3_path
     expect(document.at_css("a.Box").text).to include("Modified")
     expect(document.at_css("a.Box").text).not_to include("invented-private-value")
-    get edit_s3_variable_path(file, line_number: 1)
+    get edit_s3_variable_path(file, name: "FIRST")
     expect(document.at_css('input[name="value"]')["value"]).to eq("invented-private-value")
 
     save("changed-again")
@@ -75,7 +75,7 @@ RSpec.describe "Editing and publishing S3 files", type: :request do
     save("one")
     expect(PendingEdit.count).to eq(0)
     save("discard-me")
-    save("discard-second", line: 3)
+    save("discard-second", name: "SAME")
     post discard_s3_changes_path(file)
     expect(response).to redirect_to(s3_file_path(file))
     expect(PendingEdit.count).to eq(0)
@@ -110,7 +110,7 @@ RSpec.describe "Editing and publishing S3 files", type: :request do
   end
 
   it "rejects invalid UTF-8 on the edit page" do
-    post edit_s3_variable_path(file, line_number: 1), params: "value=%FF",
+    post edit_s3_variable_path(file), params: "name=FIRST&value=%FF",
       headers: { "CONTENT_TYPE" => "application/x-www-form-urlencoded" }
     expect(response).to have_http_status(:unprocessable_content)
     expect(document.at_css(".flash-error").text).to include("valid UTF-8")
@@ -124,11 +124,11 @@ RSpec.describe "Editing and publishing S3 files", type: :request do
     expect(PendingEdit.first!.value).to eq("kept-value")
   end
 
-  it "edits only the second occurrence and preserves every other byte" do
+  it "edits only the last line with a name and preserves every other byte" do
     original = "\uFEFF  SAME=first\r\n# invented comment\n\tSAME=second\r\nOTHER=last".b
     file.update!(content: original)
-    save('"new" # = $VALUE', line: 3)
-    expect(PendingEdit.first!.occurrence).to eq(2)
+    save('"new" # = $VALUE', name: "SAME")
+    expect(PendingEdit.first!.name).to eq("SAME")
     post publish_s3_file_path(file)
     expect(publish_request[:body].b).to eq(original.sub("second", '"new" # = $VALUE'))
     expect(file.reload.content.b).to eq(publish_request[:body].b)
@@ -137,8 +137,8 @@ RSpec.describe "Editing and publishing S3 files", type: :request do
   it "preserves a BOM prefix and a missing final newline when editing those lines" do
     original = "\uFEFF  FIRST=one\r\n# keep\n\tLAST=last".b
     file.update!(content: original)
-    save("first-change", line: 1)
-    save("last-change", line: 3)
+    save("first-change")
+    save("last-change", name: "LAST")
     get review_s3_file_path(file)
     expect(response).to have_http_status(:ok)
     post publish_s3_file_path(file)
@@ -179,8 +179,8 @@ RSpec.describe "Editing and publishing S3 files", type: :request do
 
   it "shows three context lines, line numbers, markers and diff classes" do
     file.update!(content: (1..16).map { |number| "KEY#{number}=old#{number}\n" }.join)
-    save("new5", line: 5)
-    save("new14", line: 14)
+    save("new5", name: "KEY5")
+    save("new14", name: "KEY14")
     get review_s3_file_path(file)
     expect(response).to have_http_status(:ok)
     expect(response.headers["Cache-Control"]).to eq("no-store")
@@ -226,7 +226,7 @@ RSpec.describe "Editing and publishing S3 files", type: :request do
   end
 
   it "does not permit editing invalid files, large files or bare names" do
-    get edit_s3_variable_path(file, line_number: 4)
+    get edit_s3_variable_path(file, name: "BARE")
     expect(response).to have_http_status(:not_found)
     [ { content: "INVALID NAME=value" }, { content: nil, too_large: true } ].each do |attributes|
       file.update!(attributes)
@@ -239,10 +239,12 @@ RSpec.describe "Editing and publishing S3 files", type: :request do
   end
 
   [ [ "FIRST=remote\nSAME=first\nSAME=second\n", true ],
-    [ "FIRST=remote\nSAME=first\n", false ],
+    [ "FIRST=remote\nSAME=first\n", true ],
+    [ "FIRST=remote\nOTHER=last\n", false ],
+    [ "FIRST=remote\nSAME=kept-edit\nSAME=second\n", true ],
     [ "FIRST=remote\nSAME=first\nSAME=kept-edit\n", false ] ].each do |new_text, kept|
-    it "reconciles a refreshed occurrence: #{new_text.inspect}" do
-      save("kept-edit", line: 3)
+    it "reconciles a refreshed name: #{new_text.inspect}" do
+      save("kept-edit", name: "SAME")
       client.stub_responses(:list_objects_v2, contents: [ { key: file.key, size: new_text.bytesize } ])
       client.stub_responses(:get_object, body: new_text, etag: '"refreshed"')
       post refresh_s3_path
@@ -257,6 +259,76 @@ RSpec.describe "Editing and publishing S3 files", type: :request do
     post refresh_s3_path
     expect(EnvFile.exists?(file.id)).to be(false)
     expect(PendingEdit.count).to eq(0)
+  end
+
+  it "uses a name query on GET and a hidden name on POST for path punctuation" do
+    name = "API/KEY.part?"
+    file.update!(content: "#{name}=invented-before\nOTHER=kept\n")
+    show_file
+    link = document.css("section a").find { |node| node.text == "Edit" }
+    uri = URI.parse(link["href"])
+    expect(uri.path).to eq(edit_s3_variable_path(file))
+    expect(URI.decode_www_form(uri.query).to_h).to eq("name" => name)
+    expect(link["href"]).not_to include("invented-before")
+    get link["href"]
+    expect(response).to have_http_status(:ok)
+    form = document.at_css("main form")
+    expect(form["action"]).to eq(edit_s3_variable_path(file))
+    expect(form.at_css('input[type="hidden"][name="name"]')["value"]).to eq(name)
+    expect(form.at_css("label").text).to eq(name)
+    post form["action"], params: { name: name, value: "invented-after" }
+    expect(response).to redirect_to(s3_file_path(file))
+    expect(PendingEdit.first!.name).to eq(name)
+    post publish_s3_file_path(file)
+    expect(publish_request[:body]).to eq("#{name}=invented-after\nOTHER=kept\n")
+  end
+
+  it "keeps the name from the opened form when the snapshot gains a preceding line" do
+    file.update!(content: "FIRST=one\nAPI_KEY=before\n")
+    get edit_s3_variable_path(file, name: "API_KEY")
+    form = document.at_css("main form")
+    name = form.at_css('input[name="name"]')["value"]
+    file.update!(content: "ADDED=prefix\nFIRST=one\nAPI_KEY=before\n")
+    post form["action"], params: { name: name, value: "after" }
+    expect(response).to redirect_to(s3_file_path(file))
+    expect(PendingEdit.first!.name).to eq("API_KEY")
+    post publish_s3_file_path(file)
+    expect(publish_request[:body]).to eq("ADDED=prefix\nFIRST=one\nAPI_KEY=after\n")
+  end
+
+  it "does not save when the name from an opened form has disappeared" do
+    get edit_s3_variable_path(file, name: "FIRST")
+    form = document.at_css("main form")
+    name = form.at_css('input[name="name"]')["value"]
+    file.update!(content: "OTHER=one\nSAME=second\n")
+    post form["action"], params: { name: name, value: "must-not-save" }
+    expect(response).to redirect_to(s3_file_path(file))
+    follow_redirect!
+    expect(document.at_css(".flash-error").text).to eq("The variable no longer exists. Refresh the file.")
+    expect(PendingEdit.count).to eq(0)
+    expect(file.reload.content).to eq("OTHER=one\nSAME=second\n")
+  end
+
+  it "returns 404 for an unknown name and removes the old line-number routes" do
+    get edit_s3_variable_path(file, name: "UNKNOWN")
+    expect(response).to have_http_status(:not_found)
+    get "/s3/#{file.id}/edits/2"
+    expect(response).to have_http_status(:not_found)
+    post "/s3/#{file.id}/edits/2", params: { value: "must-not-save" }
+    expect(response).to have_http_status(:not_found)
+    expect(PendingEdit.count).to eq(0)
+  end
+
+  it "shows a local edit and its link only on the last row with the name" do
+    save("changed-last", name: "SAME")
+    show_file
+    rows = document.css("section .Box-row").select { |row| row.at_css(".col-4 .text-bold").text == "SAME" }
+    expect(rows.map { |row| row.at_css(".variable-value").text }).to eq([ "first", "changed-last" ])
+    expect(rows.map { |row| row.css(".Label").map(&:text) }).to eq([ [ "Overridden" ], [ "Modified" ] ])
+    expect(rows.map { |row| row.css("a").map(&:text) }).to eq([ [], [ "Edit" ] ])
+    expect(document.css(".Label").map(&:text)).not_to include("Duplicate")
+    post publish_s3_file_path(file)
+    expect(publish_request[:body]).to eq(text.sub("SAME=second", "SAME=changed-last"))
   end
 
   it "filters the value parameter and encrypted changes from logs" do

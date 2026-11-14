@@ -2,8 +2,7 @@ class PendingEdit < ApplicationRecord
   belongs_to :env_file
   encrypts :value
 
-  validates :name, presence: true
-  validates :occurrence, numericality: { only_integer: true, greater_than: 0 }, uniqueness: { scope: [ :env_file_id, :name ] }
+  validates :name, presence: true, uniqueness: { scope: :env_file_id }
   validate :single_utf8_line
 
   private

@@ -53,11 +53,10 @@ ActiveRecord::Schema[8.1].define(version: 2026_11_14_000003) do
   create_table "pending_edits", force: :cascade do |t|
     t.integer "env_file_id", null: false
     t.string "name", null: false
-    t.integer "occurrence", null: false
     t.text "value", null: false
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
-    t.index [ "env_file_id", "name", "occurrence" ], name: "index_pending_edits_on_env_file_id_and_name_and_occurrence", unique: true
+    t.index [ "env_file_id", "name" ], name: "index_pending_edits_on_env_file_id_and_name", unique: true
     t.index [ "env_file_id" ], name: "index_pending_edits_on_env_file_id"
   end
 

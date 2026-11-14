@@ -59,6 +59,17 @@ RSpec.describe "S3 env files", type: :request do
     expect(document.at_css("title").text).to eq(".env · envs")
   end
 
+  it "labels only cards whose files have repeated names" do
+    contents["invented/.env"] = "SAME=one\nSAME=two\n"
+    contents["invented/unique.env"] = "FIRST=one\nSECOND=two\n"
+    client.stub_responses(:list_objects_v2, contents: [ object("invented/.env"), object("invented/unique.env") ])
+    refresh
+    repeated = EnvFile.find_by!(key: "invented/.env")
+    unique = EnvFile.find_by!(key: "invented/unique.env")
+    expect(document.at_css("a[href='#{s3_file_path(repeated)}']").css(".Label").map(&:text)).to include("Repeated names")
+    expect(document.at_css("a[href='#{s3_file_path(unique)}']").css(".Label").map(&:text)).not_to include("Repeated names")
+  end
+
   it "uses singular and plural refresh messages" do
     refresh
     expect(document.at_css(".flash-success").text).to eq("Refreshed 1 env file from S3.")

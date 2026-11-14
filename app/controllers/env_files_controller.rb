@@ -3,6 +3,7 @@ class EnvFilesController < ApplicationController
   before_action :load_file, only: %i[show edit update_edit discard review publish]
   param_encoding :update_edit, :value, Encoding::ASCII_8BIT
   rescue_from EnvFileRewrite::Invalid, with: :invalid_edit
+  rescue_from EnvFileEditing::MissingVariable, with: :missing_variable
   rescue_from Aws::Errors::ServiceError, with: :aws_error
   rescue_from Aws::Errors::MissingRegionError, with: :missing_region
   rescue_from Aws::Errors::MissingCredentialsError, with: :missing_credentials
@@ -20,18 +21,20 @@ class EnvFilesController < ApplicationController
 
   def show
     @result = @env_file.parsed_contents
-    @edits = @env_file.pending_edits.index_by { |edit| [ edit.name, edit.occurrence ] }
+    @edits = @env_file.pending_edits.index_by(&:name)
   end
 
   def edit
     load_entry
-    @value = @env_file.pending_edits.find_by(name: @name, occurrence: @occurrence)&.value || @entry.value
+    @value = @env_file.pending_edits.find_by(name: @name)&.value || @entry.value
+  rescue EnvFileEditing::MissingVariable
+    raise ActiveRecord::RecordNotFound, cause: nil
   end
 
   def update_edit
     load_entry
     @value = params.permit(:value).fetch(:value).dup.force_encoding(Encoding::UTF_8)
-    EnvFileEditing.save(@env_file, name: @name, occurrence: @occurrence, value: @value)
+    EnvFileEditing.save(@env_file, name: @name, value: @value)
     redirect_to s3_file_path(@env_file), notice: "Saved the local change."
   end
 
@@ -68,8 +71,8 @@ class EnvFilesController < ApplicationController
   end
 
   def load_entry
-    identity, @entry = EnvFileEditing.entry_for_line(@env_file, params[:line_number])
-    @name, @occurrence = identity
+    @name = params.permit(:name).fetch(:name)
+    @entry = EnvFileEditing.entry_for_name(@env_file, @name)
   end
 
   def invalid_edit(error)
@@ -80,6 +83,10 @@ class EnvFilesController < ApplicationController
     else
       redirect_to s3_file_path(@env_file), alert: error.message
     end
+  end
+
+  def missing_variable(error)
+    redirect_to s3_file_path(@env_file), alert: error.message
   end
 
   def stale_snapshot

@@ -72,17 +72,47 @@ RSpec.describe "Container env file contents", type: :request do
         expect(document.css("section .col-4").map(&:text)).to eq([ "FIRST", "\uFEFFSECOND" ])
       end
 
-      it "keeps and labels each duplicate and counts entries on S3 cards" do
+      it "keeps repeated names and labels overridden lines and counts entries on S3 cards" do
         show_contents("SAME=one\nOTHER=middle\nSAME=two\n")
 
         rows = document.css("section .Box-row")
         expect(rows.map { |row| row.at_css(".variable-value").text }).to eq(%w[one middle two])
-        expect(rows.map { |row| row.css(".Label").map(&:text) }).to eq([ [ "Duplicate" ], [], [ "Duplicate" ] ])
+        expect(rows.map { |row| row.css(".Label").map(&:text) }).to eq([ [ "Overridden" ], [], [] ])
         expect(document.at_css("section .Box-title .Label").text).to eq("3")
         if source == :s3
           get s3_path
           expect(document.at_css("a.Box").text).to include("3 variables")
         end
+      end
+
+      it "warns separately for two repeated names with two and three lines and no values" do
+        show_contents("BARE\nA=private-one\nB=private-two\nA=private-three\nB=private-four\nB=private-five\n")
+        warning = document.at_css('[aria-label="Repeated names"]')
+        expect(warning.css("p").map(&:text)).to eq([
+          "A is on lines 2 and 4. Only line 4 takes effect.",
+          "B is on lines 3, 5 and 6. Only line 6 takes effect."
+        ])
+        expect(warning.text).not_to include("private-")
+        expect(document.css(".flash-warn").size).to eq(2)
+        expect(document.at_css(".flash-warn").text).to include("Line 1 has no =")
+        expect(response.body.index('aria-label="Repeated names"')).to be < response.body.index('<section')
+        expect(document.css(".Label").map(&:text)).not_to include("Duplicate")
+        rows = document.css("section .Box-row")
+        expect(rows.map { |row| row.css(".Label").map(&:text) }).to eq([
+          [ "Overridden" ], [ "Overridden" ], [], [ "Overridden" ], []
+        ])
+        if source == :s3
+          expect(rows.map { |row| row.css("a").map(&:text) }).to eq([ [], [], [ "Edit" ], [], [ "Edit" ] ])
+        else
+          expect(document.css("section a")).to be_empty
+        end
+      end
+
+      it "shows no repeated-name warning for distinct names" do
+        show_contents("FIRST=one\nSECOND=two\n")
+        expect(document.at_css('[aria-label="Repeated names"]')).to be_nil
+        expect(document.css(".flash-warn")).to be_empty
+        expect(document.css(".Label").map(&:text)).not_to include("Overridden", "Duplicate")
       end
 
       it "warns about lines without = and does not use the host environment" do

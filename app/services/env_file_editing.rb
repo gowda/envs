@@ -1,23 +1,24 @@
 class EnvFileEditing
-  def self.entry_for_line(file, line_number)
-    pair = EnvFileRewrite.entries(file).find { |_identity, entry| entry.line_number.to_s == line_number.to_s }
-    raise ActiveRecord::RecordNotFound unless pair
+  class MissingVariable < EnvFileRewrite::Invalid
+    def initialize
+      super("The variable no longer exists. Refresh the file.")
+    end
+  end
 
-    pair
+  def self.entry_for_name(file, name)
+    EnvFileRewrite.entries(file)[name] || raise(MissingVariable)
   end
 
   def self.discard(file)
     file.with_lock { file.pending_edits.delete_all }
   end
 
-  def self.save(file, name:, occurrence:, value:)
+  def self.save(file, name:, value:)
     file.with_lock do
-      entry = EnvFileRewrite.entries(file)[[ name, occurrence ]]
-      raise EnvFileRewrite::Invalid, "The occurrence no longer exists. Refresh the file." unless entry
-
-      edit = file.pending_edits.find_or_initialize_by(name: name, occurrence: occurrence)
+      entry = entry_for_name(file, name)
+      edit = file.pending_edits.find_or_initialize_by(name: name)
       edit.value = value
-      edits = file.pending_edits.to_a.reject { |other| other.name == name && other.occurrence == occurrence }
+      edits = file.pending_edits.to_a.reject { |other| other.name == name }
       EnvFileRewrite.call(file, edits + [ edit ])
       if value == entry.value
         edit.destroy! if edit.persisted?
@@ -28,14 +29,10 @@ class EnvFileEditing
   end
 
   def self.reconcile(file)
-    counts = Hash.new(0)
-    entries = file.parsed_contents.entries.to_h do |entry|
-      counts[entry.name] += 1
-      [ [ entry.name, counts[entry.name] ], entry.value ]
-    end
+    entries = file.parsed_contents.entries.index_by(&:name)
     file.pending_edits.each do |edit|
-      identity = [ edit.name, edit.occurrence ]
-      edit.destroy! if !entries.key?(identity) || entries[identity] == edit.value
+      entry = entries[edit.name]
+      edit.destroy! if !entry || entry.value == edit.value
     end
   end
 end
