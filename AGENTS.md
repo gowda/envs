@@ -1,4 +1,4 @@
-# Project
+# envs
 
 envs is a web app for viewing env files from uploads and S3 snapshots.
 The app supports local edits to S3 snapshots and publishes the changes to S3.
@@ -11,7 +11,7 @@ The app supports local edits to S3 snapshots and publishes the changes to S3.
 - The asset pipeline is Propshaft. The UI uses vendored Primer CSS 21.5.1.
 - JavaScript is Stimulus through importmap. The app has no Turbo and no Node.
 - Active Storage keeps uploaded files on the local disk, under `storage/`.
-- Active Record encryption protects the S3 snapshots. The key is `ENVS_ENCRYPTION_KEY`.
+- Active Record encryption protects the S3 snapshots and the local edits. The key is `ENVS_ENCRYPTION_KEY`.
 - The S3 client is `aws-sdk-s3`. The settings are `ENVS_S3_BUCKET`, `ENVS_S3_PREFIX` and `AWS_REGION`.
 - The app has no Action Mailer, Action Cable or job queue.
 - The repository is public.
@@ -78,7 +78,7 @@ The app supports local edits to S3 snapshots and publishes the changes to S3.
 - `README.md` and `docs/` are for people and use prose.
 - `AGENTS.md` is for agents.
 - `README.md` is the front door.
-- `docs/env-file-format.md` holds the rules of the reader.
+- `docs/env-file-format.md` holds the rules for reading an env file.
 - `docs/s3.md` holds the S3, edit and publish details.
 - These files use the invented `postgres.env` example from `README.md`.
 - `docs/images/variables.png` shows that example.
