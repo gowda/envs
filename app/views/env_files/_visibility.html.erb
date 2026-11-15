@@ -2,6 +2,6 @@
   <% if @visibility.revealed?(name) %>
     <%= link_to "Hide", normal_path, class: "ml-2" %>
   <% else %>
-    <%= button_to "Show", reveal_path, params: { name: name }, class: "btn btn-sm", aria: { label: "Show #{name}" } %>
+    <%= button_to "Show", reveal_path, params: { name: name }, form_class: "d-inline-block", class: "btn btn-sm", aria: { label: "Show #{name}" } %>
   <% end %>
 <% end %>

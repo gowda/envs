@@ -120,7 +120,7 @@ The app supports local edits to S3 snapshots and publishes the changes to S3.
 - If its ETag or entries differ, refresh the rows and return to the file page with conflicts.
 - A publish uses the stored ETag as a condition.
 - A publish repeats the content type, the metadata and the encryption settings of the object.
-- A value does not go into a URL or into the log.
+- A value does not go into a URL or into the log in any environment.
 - The app uses as little JavaScript as possible.
 - Every script is a Stimulus controller, loaded through importmap.
 - Do not add an inline script, Turbo or Node.
