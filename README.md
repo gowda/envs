@@ -1,6 +1,6 @@
 # envs
 
-envs is a web app with the look of GitHub for people who inspect container configuration. You can view and edit env files for Docker and Amazon ECS containers.
+envs is a web app for inspecting container configuration, with the look of GitHub. You can view and edit env files for Docker and Amazon ECS.
 
 ![Seven variables from postgres.env](docs/images/variables.png)
 
@@ -21,7 +21,7 @@ PGDATA=/var/lib/postgresql/data/pgdata
 TZ=UTC
 ```
 
-For `POSTGRES_INITDB_ARGS`, containers keep the double quotes as part of the value, while dotenv libraries remove them. The two disagree; envs shows what the container gets.
+For `POSTGRES_INITDB_ARGS`, containers keep the double quotes, while dotenv libraries remove them. envs shows what the container gets.
 
 ## Quick start
 
@@ -52,11 +52,13 @@ You need Ruby 3.4.12 and Bundler. The app uses Rails 8.1 and SQLite.
 
 ### View an uploaded file
 
-Open `/files` and drop a UTF-8 env file of 1 MB or less, or choose **Select an env file**. The app stores valid uploads and opens `/files/<public ID>`, where you can view variables in file order. Keep that URL to return: the app has no list of stored uploads.
+Open `/files` and drop a UTF-8 env file of 1 MB or less, or choose **Select an env file**. Valid uploads open at `/files/<public ID>`, with variables in file order. Keep that URL to return: the app has no list of stored uploads.
 
 ### Work with S3
 
 Open `/s3` and select **Refresh from S3**. Open a file card, select **Edit** beside a variable, change its value and select **Save**. For a repeated name, select **Resolve** and choose the line to keep on publish. Select **Review & publish**, check the difference, then select **Publish**. See [S3](docs/s3.md) for refresh, conflict and publish details.
+
+S3 secrets stay masked until you select **Show** for one name on that page.
 
 ## Configuration
 
@@ -104,7 +106,7 @@ The interface uses vendored Primer CSS 21.5.1 under the MIT licence.
 
 ## Security
 
-The app encrypts secret values and their pending changes. It does not write a value to the log or to a URL. Don't put a real value in an issue when reporting a problem.
+The app encrypts secret values and their pending changes. Values stay out of logs and URLs. Don't include real values when reporting a problem.
 
 ## License
 

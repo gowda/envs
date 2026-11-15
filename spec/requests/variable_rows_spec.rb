@@ -67,7 +67,7 @@ RSpec.describe "S3 variable row storage", type: :request do
     expect(all_storage).not_to include(text, "invented-first", "invented-last", "invented-comment", "BARE_INVENTED")
     get s3_file_path(file)
     expect(response).to have_http_status(:ok)
-    expect(response.body).to include("invented-first", "invented-last")
+    expect(response.body).not_to include("invented-first", "invented-last")
   end
 
   it "stores edit values and bases and choice bases by type and converts them at once in both directions" do
@@ -187,7 +187,7 @@ RSpec.describe "S3 variable row storage", type: :request do
     update_env_file(file, content: original)
     mark("SECRET_KEY", "secret")
     edit("SECRET_KEY", "invented-local")
-    get review_s3_file_path(file)
+    post reveal_s3_review_path(file), params: { name: "SECRET_KEY" }
     expect(response).to have_http_status(:ok)
     page = Nokogiri::HTML5(response.body)
     expect(page.at_css(".diff-deletion .diff-text").text).to eq("SECRET_KEY=invented-last")

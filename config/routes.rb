@@ -8,6 +8,10 @@ Rails.application.routes.draw do
   get "s3", to: "env_files#index", as: :s3
   post "s3/refresh", to: "env_files#refresh", as: :refresh_s3
   post "s3/:id/value_types", to: "env_files#update_value_type", as: :s3_value_types
+  post "s3/:id/reveal", to: "env_files#reveal", as: :reveal_s3_file
+  post "s3/:id/edits/reveal", to: "env_files#reveal_edit", as: :reveal_s3_edit
+  post "s3/:id/choices/reveal", to: "env_files#reveal_choice", as: :reveal_s3_choice
+  post "s3/:id/review/reveal", to: "env_files#reveal_review", as: :reveal_s3_review
   get "s3/:id/edits", to: "env_files#edit", as: :edit_s3_variable
   post "s3/:id/edits", to: "env_files#update_edit"
   delete "s3/:id/edits", to: "env_files#delete_edit"

@@ -68,7 +68,7 @@ RSpec.describe "S3 variable types", type: :request do
     expect(row.attributes.slice("env_file_id", "name", "value_type")).to eq(
       "env_file_id" => file.id, "name" => "POSTGRES_PASSWORD", "value_type" => "secret")
     expect(rows.first(2).map { |entry| entry.css(".Label").map(&:text) }).to eq([ [ "Overridden", "Secret" ], [ "Secret" ] ])
-    expect(rows.map { |entry| entry.at_css(".variable-value").text }).to eq([ "invented-first", "invented-last", "invented-key", "UTC" ])
+    expect(rows.map { |entry| entry.at_css(".variable-value").text }).to eq([ "••••••••", "••••••••", "invented-key", "UTC" ])
     expect(suggestions.map(&:text).join).not_to include("POSTGRES_PASSWORD")
     expect(file.reload).not_to be_pending_changes
     get s3_path
@@ -168,7 +168,7 @@ RSpec.describe "S3 variable types", type: :request do
     expect(file.variables.where(name: "POSTGRES_PASSWORD").pluck(:value_type)).to eq(%w[secret secret])
   end
 
-  it "keeps the review, choices and edits unchanged and retains types after discard and publish" do
+  it "masks the review, keeps choices and edits and retains types after discard and publish" do
     post s3_variable_choice_path(file), params: { name: "POSTGRES_PASSWORD", line_number: 1, line_count: 2 }
     post edit_s3_variable_path(file), params: { name: "POSTGRES_PASSWORD", value: "invented-edit", etag: file.etag }
     get review_s3_file_path(file)
@@ -182,7 +182,8 @@ RSpec.describe "S3 variable types", type: :request do
     expect(file.pending_edits.reload.map { |edit| [ edit.name, edit.value, edit.base_value ] }).to eq(edits)
     expect(file.pending_choices.reload.map { |choice| [ choice.name, choice.base_values ] }).to eq(choices)
     get review_s3_file_path(file)
-    expect(document.at_css("main .Box").to_html).to eq(review)
+    expect(document.at_css("main .Box").to_html).not_to eq(review)
+    expect(response.body).not_to include("invented-first", "invented-last", "invented-edit")
     post discard_s3_changes_path(file)
     expect(file.reload).not_to be_pending_changes
     expect(file.variables.where.not(value_type: nil).first!).to be_secret
