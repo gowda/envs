@@ -39,7 +39,7 @@ group :development do
   gem "web-console"
 end
 
-gem "aws-sdk-s3", "~> 1.237"
+gem "aws-sdk-s3", "~> 1.245"
 
 gem "importmap-rails", "= 2.2.3"
 
